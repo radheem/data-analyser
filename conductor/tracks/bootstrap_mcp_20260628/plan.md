@@ -4,7 +4,7 @@
 - [x] Task: Initialize Python project with `uv` (09bc4fb)
     - [ ] Create `pyproject.toml`
     - [ ] Configure Python version constraint (>=3.12)
-- [ ] Task: Add Dependencies
+- [x] Task: Add Dependencies (b231bff)
     - [ ] Add `mcp` package
     - [ ] Add `google-cloud-bigquery` package
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Project Initialization and Dependencies' (Protocol in workflow.md)
