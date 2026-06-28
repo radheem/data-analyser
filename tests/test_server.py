@@ -68,3 +68,12 @@ def test_ping_bigquery_uninitialized():
         assert "not initialized" in data["message"]
     finally:
         src.server.bq_client = original_client
+
+def test_political_ads_ontology():
+    """Test political_ads_ontology tool returning the expected schema details."""
+    import src.server
+    result = src.server.political_ads_ontology()
+    data = json.loads(result)
+    assert "table" in data
+    assert "columns" in data["table"]
+    assert "ad_id" in data["table"]["columns"]
