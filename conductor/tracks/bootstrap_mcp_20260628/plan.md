@@ -20,7 +20,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Core Server Implementation' (Protocol in workflow.md) (5a3c4ac)
 
 ## Phase 3: Health Check Tool Implementation
-- [ ] Task: Implement `ping_bigquery` tool
+- [x] Task: Implement `ping_bigquery` tool (fe98579)
     - [ ] Write Tests: Add a test verifying the tool returns the expected success structure when the mock client succeeds.
     - [ ] Implement: Create the `@mcp.tool()` function `ping_bigquery`.
     - [ ] Implement: Execute a `SELECT 1` query using the BigQuery client within the tool.
