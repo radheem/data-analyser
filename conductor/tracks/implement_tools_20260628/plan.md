@@ -1,7 +1,7 @@
 # Implementation Plan: Implement tools for mcp
 
 ## Phase 1: Ontology and Generic Query Tools
-- [ ] Task: Implement `political_ads_ontology` tool
+- [x] Task: Implement `political_ads_ontology` tool (0db4911)
     - [ ] Write Tests: Create tests to verify the tool returns the expected schema dictionary/string.
     - [ ] Implement: Create the `@mcp.tool()` function returning the schema details.
 - [ ] Task: Implement `query_ads` tool
