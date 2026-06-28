@@ -150,42 +150,56 @@ Before marking any task complete, verify:
 
 ## Development Commands
 
-**AI AGENT INSTRUCTION: This section should be adapted to the project's specific language, framework, and build tools.**
-
 ### Setup
 ```bash
-# Example: Commands to set up the development environment (e.g., install dependencies, configure database)
-# e.g., for a Node.js project: npm install
-# e.g., for a Go project: go mod tidy
+# Initialize and sync Python virtual environment
+uv sync
 ```
 
 ### Daily Development
 ```bash
-# Example: Commands for common daily tasks (e.g., start dev server, run tests, lint, format)
-# e.g., for a Node.js project: npm run dev, npm test, npm run lint
-# e.g., for a Go project: go run main.go, go test ./..., go fmt ./...
+# Run unit and integration tests
+PYTHONPATH=. uv run pytest tests/
+
+# Run tests with coverage reporting
+PYTHONPATH=. uv run pytest --cov=src --cov-report=term-missing tests/
 ```
 
 ### Before Committing
 ```bash
-# Example: Commands to run all pre-commit checks (e.g., format, lint, type check, run tests)
-# e.g., for a Node.js project: npm run check
-# e.g., for a Go project: make check (if a Makefile exists)
+# Execute pre-commit checks and full test suite
+PYTHONPATH=. uv run pytest tests/
 ```
 
 ## Testing Requirements
 
 ### Unit Testing
 - Every module must have corresponding tests.
-- Use appropriate test setup/teardown mechanisms (e.g., fixtures, beforeEach/afterEach).
-- Mock external dependencies.
-- Test both success and failure cases.
+- Mock the Google Cloud BigQuery client and other external dependencies extensively using `pytest-mock` to keep test execution rapid and cost-free.
+- Test both success and failure cases (such as API errors, connection issues, or authorization/credential failures).
 
-### Integration Testing
-- Test complete user flows
-- Verify database transactions
-- Test authentication and authorization
-- Check form submissions
+### Integration & End-to-End (E2E) Testing
+- **Mandatory Final Phase for All Tracks:** Every single track plan generated MUST contain a final phase dedicated strictly to **End-to-End Testing**. No track can be marked complete without passing this E2E phase.
+- **Why Run Locally against Docker?** The production Docker image does not include development-only packages like `pytest` to keep production image sizes lean and secure. Therefore, E2E/Integration testing MUST be executed by running the test suite/verification scripts **locally on the host machine** while connecting to the **MCP server running inside the Docker container**.
+- **Foolproof E2E Verification Workflow for AI Agents:**
+  Follow these exact steps in sequence to run the E2E verification:
+  
+  1. **Clean and Start the Containerized MCP Server:**
+     Stop any existing containers, wipe volumes, and rebuild the MCP container with interactive stdio capabilities kept open:
+     ```bash
+     docker compose -f deploy/docker-compose.yml down -v && docker compose -f deploy/docker-compose.yml up -d --build
+     ```
+  
+  2. **Verify Container Log Status:**
+     Run `docker compose -f deploy/docker-compose.yml logs` and ensure you see:
+     `Successfully initialized BigQuery client.`
+  
+  3. **Run the Full Test Suite Locally:**
+     Use `uv` (which loads our virtual environment on the host) to run tests against the source files:
+     ```bash
+     PYTHONPATH=. uv run pytest tests/
+     ```
+
 
 ### Mobile Testing
 - Test on actual iPhone when possible
