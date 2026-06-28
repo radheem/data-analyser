@@ -1,7 +1,7 @@
 # Implementation Plan: Bootstrap Python FastMCP Server and BigQuery Client
 
 ## Phase 1: Project Initialization and Dependencies
-- [ ] Task: Initialize Python project with `uv`
+- [x] Task: Initialize Python project with `uv` (09bc4fb)
     - [ ] Create `pyproject.toml`
     - [ ] Configure Python version constraint (>=3.12)
 - [ ] Task: Add Dependencies
