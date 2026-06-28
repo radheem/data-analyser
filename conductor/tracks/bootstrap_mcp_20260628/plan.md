@@ -14,7 +14,7 @@
     - [ ] Write Tests: Create `tests/test_server.py` with a basic test asserting the FastMCP instance can be created.
     - [ ] Implement: Instantiate `FastMCP("political-ads-mcp")` in `server.py`
     - [ ] Implement: Add standard `if __name__ == "__main__":` block to run the server.
-- [ ] Task: Implement BigQuery Client
+- [x] Task: Implement BigQuery Client (4c4e11d)
     - [ ] Write Tests: Mock the BigQuery client and test the initialization logic.
     - [ ] Implement: Add global/reusable BigQuery client instantiation in `server.py`.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Core Server Implementation' (Protocol in workflow.md)
