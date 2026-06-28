@@ -1,0 +1,24 @@
+# Implementation Plan: Implement tools for mcp
+
+## Phase 1: Ontology and Generic Query Tools
+- [ ] Task: Implement `political_ads_ontology` tool
+    - [ ] Write Tests: Create tests to verify the tool returns the expected schema dictionary/string.
+    - [ ] Implement: Create the `@mcp.tool()` function returning the schema details.
+- [ ] Task: Implement `query_ads` tool
+    - [ ] Write Tests: Mock the BigQuery client to verify it executes custom SQL and cleanly traps errors.
+    - [ ] Implement: Create the `@mcp.tool()` function, ensure read-only safety, and enforce row limits.
+- [ ] Task: Conductor - User Manual Verification 'Phase 1: Ontology and Generic Query Tools' (Protocol in workflow.md)
+
+## Phase 2: Top Advertisers Tool
+- [ ] Task: Implement `get_top_advertisers` tool
+    - [ ] Write Tests: Mock the BigQuery client to verify SQL construction, specifically sorting by `spend_range_max_usd`.
+    - [ ] Implement: Create the `@mcp.tool()` function.
+    - [ ] Implement: Add logic to format spend and impression ranges as JSON objects.
+- [ ] Task: Conductor - User Manual Verification 'Phase 2: Top Advertisers Tool' (Protocol in workflow.md)
+
+## Phase 3: Ad Search Tool
+- [ ] Task: Implement `search_advertiser_ads` tool
+    - [ ] Write Tests: Mock the BigQuery client to verify SQL `WHERE` clause construction for region, dates, and ad types.
+    - [ ] Implement: Create the `@mcp.tool()` function taking the optional filters.
+    - [ ] Implement: Apply the JSON object range formatting to the result payload.
+- [ ] Task: Conductor - User Manual Verification 'Phase 3: Ad Search Tool' (Protocol in workflow.md)
