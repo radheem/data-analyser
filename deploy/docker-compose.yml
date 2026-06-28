@@ -1,0 +1,10 @@
+services:
+  mcp-server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    volumes:
+      # Mount the JSON credentials file from the project root into the container
+      - ../gcp-creds.json:/app/gcp-creds.json:ro
+    env_file:
+      - ../.env
