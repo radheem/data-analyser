@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import logging
@@ -8,8 +9,12 @@ from google.auth.exceptions import DefaultCredentialsError
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("political-ads-mcp")
 
-# Instantiate the FastMCP server
-mcp = FastMCP("political-ads-mcp")
+# Instantiate the FastMCP server based on transport env
+transport = os.environ.get("MCP_TRANSPORT", "stdio")
+if transport == "sse":
+    mcp = FastMCP("political-ads-mcp", host="0.0.0.0", port=5000)
+else:
+    mcp = FastMCP("political-ads-mcp")
 
 # Initialize BigQuery client globally
 try:
