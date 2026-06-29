@@ -16,12 +16,12 @@
     - [ ] Implement: Add logic to format spend and impression ranges as JSON objects.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Top Advertisers Tool' (Protocol in workflow.md) (d24b5af)
 
-## Phase 3: Ad Search Tool
+## Phase 3: Ad Search Tool [checkpoint: ac629cd]
 - [x] Task: Implement `search_advertiser_ads` tool (232be48)
     - [ ] Write Tests: Mock the BigQuery client to verify SQL `WHERE` clause construction for region, dates, and ad types.
     - [ ] Implement: Create the `@mcp.tool()` function taking the optional filters.
     - [ ] Implement: Apply the JSON object range formatting to the result payload.
-- [~] Task: Conductor - User Manual Verification 'Phase 3: Ad Search Tool' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Ad Search Tool' (Protocol in workflow.md) (ac629cd)
 
 ## Phase 4: Containerized End-to-End Testing
 - [ ] Task: Configure Docker Compose for Interactive Stdio
