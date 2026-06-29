@@ -21,7 +21,7 @@
     - [ ] Write Tests: Mock the BigQuery client to verify SQL `WHERE` clause construction for region, dates, and ad types.
     - [ ] Implement: Create the `@mcp.tool()` function taking the optional filters.
     - [ ] Implement: Apply the JSON object range formatting to the result payload.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Ad Search Tool' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 3: Ad Search Tool' (Protocol in workflow.md)
 
 ## Phase 4: Containerized End-to-End Testing
 - [ ] Task: Configure Docker Compose for Interactive Stdio
