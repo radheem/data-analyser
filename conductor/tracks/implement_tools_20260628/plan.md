@@ -9,12 +9,12 @@
     - [ ] Implement: Create the `@mcp.tool()` function, ensure read-only safety, and enforce row limits.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Ontology and Generic Query Tools' (Protocol in workflow.md) (c9ec4f8)
 
-## Phase 2: Top Advertisers Tool
+## Phase 2: Top Advertisers Tool [checkpoint: d24b5af]
 - [x] Task: Implement `get_top_advertisers` tool (06712cf)
     - [ ] Write Tests: Mock the BigQuery client to verify SQL construction, specifically sorting by `spend_range_max_usd`.
     - [ ] Implement: Create the `@mcp.tool()` function.
     - [ ] Implement: Add logic to format spend and impression ranges as JSON objects.
-- [~] Task: Conductor - User Manual Verification 'Phase 2: Top Advertisers Tool' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Top Advertisers Tool' (Protocol in workflow.md) (d24b5af)
 
 ## Phase 3: Ad Search Tool
 - [ ] Task: Implement `search_advertiser_ads` tool
