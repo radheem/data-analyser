@@ -8,3 +8,5 @@ services:
       - ../gcp-creds.json:/app/gcp-creds.json:ro
     env_file:
       - ../.env
+    stdin_open: true
+    tty: true
