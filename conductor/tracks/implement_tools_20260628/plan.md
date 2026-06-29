@@ -14,7 +14,7 @@
     - [ ] Write Tests: Mock the BigQuery client to verify SQL construction, specifically sorting by `spend_range_max_usd`.
     - [ ] Implement: Create the `@mcp.tool()` function.
     - [ ] Implement: Add logic to format spend and impression ranges as JSON objects.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Top Advertisers Tool' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 2: Top Advertisers Tool' (Protocol in workflow.md)
 
 ## Phase 3: Ad Search Tool
 - [ ] Task: Implement `search_advertiser_ads` tool
