@@ -24,7 +24,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Ad Search Tool' (Protocol in workflow.md) (ac629cd)
 
 ## Phase 4: Containerized End-to-End Testing
-- [ ] Task: Configure Docker Compose for Interactive Stdio
+- [x] Task: Configure Docker Compose for Interactive Stdio (0fafbd1)
     - [ ] Implement: Update `deploy/docker-compose.yml` to include `stdin_open: true` and `tty: true`.
 - [ ] Task: Verify Container Execution
     - [ ] Implement: Build and run the service via Docker Compose and check logs for "Successfully initialized BigQuery client."
