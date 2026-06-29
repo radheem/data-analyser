@@ -77,3 +77,59 @@ def test_political_ads_ontology():
     assert "table" in data
     assert "columns" in data["table"]
     assert "ad_id" in data["table"]["columns"]
+
+def test_query_ads_success():
+    """Test query_ads tool when valid SELECT is provided."""
+    import src.server
+    
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    # Mocking rows returned
+    mock_row = MagicMock()
+    mock_row.items.return_value = [("ad_id", "CR123"), ("advertiser_name", "MOCK ADVERTISER")]
+    mock_query_job.__iter__.return_value = [mock_row]
+    mock_client.query.return_value = mock_query_job
+    
+    original_client = src.server.bq_client
+    src.server.bq_client = mock_client
+    
+    try:
+        result = src.server.query_ads("SELECT ad_id, advertiser_name FROM `creative_stats` LIMIT 10")
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert len(data["rows"]) == 1
+        assert data["rows"][0]["ad_id"] == "CR123"
+        mock_client.query.assert_called_once()
+        # Verify query had LIMIT 10 preserved
+        called_sql = mock_client.query.call_args[0][0]
+        assert "LIMIT 10" in called_sql
+    finally:
+        src.server.bq_client = original_client
+
+def test_query_ads_non_select():
+    """Test query_ads tool blocks non-SELECT queries."""
+    import src.server
+    
+    result = src.server.query_ads("DELETE FROM `creative_stats` WHERE 1=1")
+    data = json.loads(result)
+    assert data["status"] == "error"
+    assert "Only read-only SELECT" in data["message"]
+
+def test_query_ads_injects_limit():
+    """Test query_ads tool injects LIMIT if missing."""
+    import src.server
+    
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.__iter__.return_value = []
+    mock_client.query.return_value = mock_query_job
+    
+    original_client = src.server.bq_client
+    src.server.bq_client = mock_client
+    
+    try:
+        src.server.query_ads("SELECT * FROM `creative_stats`")
+        called_sql = mock_client.query.call_args[0][0]
+        assert "LIMIT 100" in called_sql
+    finally:
+        src.server.bq_client = original_client

@@ -78,5 +78,54 @@ def political_ads_ontology() -> str:
     }
     return json.dumps(ontology)
 
+@mcp.tool()
+def query_ads(sql: str) -> str:
+    """Execute a read-only custom SQL query (SELECT / WITH) over the Google political ads dataset.
+    Results are capped at a maximum of 100 rows.
+    Example:
+    - SELECT advertiser_name, SUM(spend_range_max_usd) FROM `bigquery-public-data.google_political_ads.creative_stats` GROUP BY advertiser_name LIMIT 10"""
+    # Security/Safety check: strictly read-only
+    clean_sql = sql.strip()
+    if not clean_sql.upper().startswith("SELECT") and not clean_sql.upper().startswith("WITH"):
+        return json.dumps({
+            "status": "error",
+            "message": "Security Error: Only read-only SELECT or WITH statements are allowed."
+        })
+
+    if bq_client is None:
+        return json.dumps({
+            "status": "error",
+            "message": "BigQuery client is not initialized. Check credentials."
+        })
+        
+    # Enforce LIMIT 100 to prevent cost/egress spikes
+    if "LIMIT" not in clean_sql.upper():
+        clean_sql += " LIMIT 100"
+        
+    try:
+        query_job = bq_client.query(clean_sql)
+        results = []
+        for row in query_job:
+            # Convert row mapping to dict
+            row_dict = {}
+            for key, val in row.items():
+                # Handle dates and timestamps serialization
+                if hasattr(val, "isoformat"):
+                    row_dict[key] = val.isoformat()
+                else:
+                    row_dict[key] = val
+            results.append(row_dict)
+            
+        return json.dumps({
+            "status": "success",
+            "rows": results
+        })
+    except Exception as e:
+        log.exception(f"Error executing custom query: {clean_sql}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
 if __name__ == "__main__":
     mcp.run()
