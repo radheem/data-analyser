@@ -4,7 +4,7 @@
 - [x] Task: Implement `political_ads_ontology` tool (0db4911)
     - [ ] Write Tests: Create tests to verify the tool returns the expected schema dictionary/string.
     - [ ] Implement: Create the `@mcp.tool()` function returning the schema details.
-- [ ] Task: Implement `query_ads` tool
+- [x] Task: Implement `query_ads` tool (5e8232c)
     - [ ] Write Tests: Mock the BigQuery client to verify it executes custom SQL and cleanly traps errors.
     - [ ] Implement: Create the `@mcp.tool()` function, ensure read-only safety, and enforce row limits.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Ontology and Generic Query Tools' (Protocol in workflow.md)
