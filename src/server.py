@@ -127,5 +127,64 @@ def query_ads(sql: str) -> str:
             "message": str(e)
         })
 
+@mcp.tool()
+def get_top_advertisers(region: str = "US", limit: int = 10) -> str:
+    """Get the highest spending political advertisers in a specific region.
+    Returns the public names, total ad count, aggregated spend range in USD, and active days.
+    Primary sorting is based on total maximum estimated USD spend."""
+    if bq_client is None:
+        return json.dumps({
+            "status": "error",
+            "message": "BigQuery client is not initialized. Check credentials."
+        })
+        
+    sql = f"""
+        SELECT 
+            advertiser_name,
+            SUM(spend_range_min_usd) as total_min_spend_usd,
+            SUM(spend_range_max_usd) as total_max_spend_usd,
+            SUM(num_of_days) as total_days_active,
+            COUNT(*) as ad_count
+        FROM `bigquery-public-data.google_political_ads.creative_stats`
+        WHERE regions = '{region}'
+        GROUP BY advertiser_name
+        ORDER BY total_max_spend_usd DESC
+        LIMIT {limit}
+    """
+    
+    try:
+        query_job = bq_client.query(sql)
+        advertisers = []
+        for row in query_job:
+            # Construct row dict with custom formatting for ranges as JSON objects
+            row_dict = {}
+            for key, val in row.items():
+                row_dict[key] = val
+                
+            # Create structured JSON objects for the min/max spend range
+            spend_range = {
+                "min": row_dict.get("total_min_spend_usd"),
+                "max": row_dict.get("total_max_spend_usd")
+            }
+            
+            advertisers.append({
+                "advertiser_name": row_dict.get("advertiser_name"),
+                "spend_range_usd": spend_range,
+                "total_days_active": row_dict.get("total_days_active"),
+                "ad_count": row_dict.get("ad_count")
+            })
+            
+        return json.dumps({
+            "status": "success",
+            "region": region,
+            "advertisers": advertisers
+        })
+    except Exception as e:
+        log.exception(f"Error in get_top_advertisers: {str(e)}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
 if __name__ == "__main__":
     mcp.run()

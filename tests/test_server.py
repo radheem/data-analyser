@@ -133,3 +133,43 @@ def test_query_ads_injects_limit():
         assert "LIMIT 100" in called_sql
     finally:
         src.server.bq_client = original_client
+
+def test_get_top_advertisers_success():
+    """Test get_top_advertisers tool executes correct query and parses output."""
+    import src.server
+    
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    
+    # Mocking rows returned with aggregated data
+    mock_row = MagicMock()
+    mock_row.items.return_value = [
+        ("advertiser_name", "BIG SPENDER INC"),
+        ("total_max_spend_usd", 1500000),
+        ("total_min_spend_usd", 1000000),
+        ("total_days_active", 450),
+        ("ad_count", 250)
+    ]
+    mock_query_job.__iter__.return_value = [mock_row]
+    mock_client.query.return_value = mock_query_job
+    
+    original_client = src.server.bq_client
+    src.server.bq_client = mock_client
+    
+    try:
+        result = src.server.get_top_advertisers(region="US", limit=5)
+        data = json.loads(result)
+        
+        assert data["status"] == "success"
+        assert len(data["advertisers"]) == 1
+        assert data["advertisers"][0]["advertiser_name"] == "BIG SPENDER INC"
+        # Verify range-based metric formatted as JSON object
+        assert data["advertisers"][0]["spend_range_usd"]["min"] == 1000000
+        assert data["advertisers"][0]["spend_range_usd"]["max"] == 1500000
+        
+        called_sql = mock_client.query.call_args[0][0]
+        assert "SUM(spend_range_max_usd)" in called_sql
+        assert "regions = 'US'" in called_sql
+        assert "LIMIT 5" in called_sql
+    finally:
+        src.server.bq_client = original_client
