@@ -10,7 +10,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Ontology and Generic Query Tools' (Protocol in workflow.md) (c9ec4f8)
 
 ## Phase 2: Top Advertisers Tool
-- [ ] Task: Implement `get_top_advertisers` tool
+- [x] Task: Implement `get_top_advertisers` tool (06712cf)
     - [ ] Write Tests: Mock the BigQuery client to verify SQL construction, specifically sorting by `spend_range_max_usd`.
     - [ ] Implement: Create the `@mcp.tool()` function.
     - [ ] Implement: Add logic to format spend and impression ranges as JSON objects.
