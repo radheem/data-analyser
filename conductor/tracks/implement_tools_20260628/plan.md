@@ -7,7 +7,7 @@
 - [x] Task: Implement `query_ads` tool (5e8232c)
     - [ ] Write Tests: Mock the BigQuery client to verify it executes custom SQL and cleanly traps errors.
     - [ ] Implement: Create the `@mcp.tool()` function, ensure read-only safety, and enforce row limits.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Ontology and Generic Query Tools' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 1: Ontology and Generic Query Tools' (Protocol in workflow.md)
 
 ## Phase 2: Top Advertisers Tool
 - [ ] Task: Implement `get_top_advertisers` tool
