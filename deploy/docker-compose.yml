@@ -8,5 +8,9 @@ services:
       - ../gcp-creds.json:/app/gcp-creds.json:ro
     env_file:
       - ../.env
+    environment:
+      - MCP_TRANSPORT=sse
+    ports:
+      - "5001:5000"
     stdin_open: true
     tty: true
