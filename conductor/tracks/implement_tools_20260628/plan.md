@@ -28,6 +28,6 @@
     - [ ] Implement: Update `deploy/docker-compose.yml` to include `stdin_open: true` and `tty: true`.
 - [x] Task: Verify Container Execution (997c11b)
     - [ ] Implement: Build and run the service via Docker Compose and check logs for "Successfully initialized BigQuery client."
-- [ ] Task: Run Host-Side Tests Against Container
+- [x] Task: Run Host-Side Tests Against Container (f808101)
     - [ ] Implement: Run `PYTHONPATH=. uv run pytest tests/` on the host to verify all mock and integration tests execute successfully.
 - [ ] Task: Conductor - User Manual Verification 'Phase 4: Containerized End-to-End Testing' (Protocol in workflow.md)
