@@ -1,3 +1,4 @@
+import re
 import json
 import logging
 from mcp.server.fastmcp import FastMCP
@@ -181,6 +182,160 @@ def get_top_advertisers(region: str = "US", limit: int = 10) -> str:
         })
     except Exception as e:
         log.exception(f"Error in get_top_advertisers: {str(e)}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
+def _parse_impressions_range(impressions_str: str) -> dict:
+    """Helper to parse raw impressions ranges like '10000-50000' or '≤ 10000' into min/max ints."""
+    if not impressions_str:
+        return {"min": None, "max": None}
+        
+    import re
+    # Strip spaces and commas
+    cleaned = impressions_str.replace(",", "").strip()
+    
+    # Handle '≤ 10000'
+    if "≤" in cleaned or "<=" in cleaned:
+        nums = re.findall(r"\d+", cleaned)
+        if nums:
+            return {"min": 0, "max": int(nums[0])}
+            
+    # Handle '≥ 1000000' or '1000000+'
+    if "≥" in cleaned or ">=" in cleaned or "+" in cleaned:
+        nums = re.findall(r"\d+", cleaned)
+        if nums:
+            return {"min": int(nums[0]), "max": None}
+            
+    # Handle standard range '10000-50000'
+    parts = cleaned.split("-")
+    if len(parts) == 2:
+        try:
+            return {"min": int(parts[0]), "max": int(parts[1])}
+        except ValueError:
+            pass
+            
+    # Fallback to general digit extraction
+    nums = re.findall(r"\d+", cleaned)
+    if len(nums) == 2:
+        return {"min": int(nums[0]), "max": int(nums[1])}
+    elif len(nums) == 1:
+        return {"min": int(nums[0]), "max": int(nums[0])}
+        
+    return {"min": None, "max": None}
+
+@mcp.tool()
+def search_advertiser_ads(
+    advertiser_name: str,
+    limit: int = 10,
+    region: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    ad_type: str = None
+) -> str:
+    """Search for political advertisements by advertiser name with optional filters.
+    Supports filtering by region (e.g. US), date ranges, and ad format (VIDEO, TEXT, IMAGE).
+    Spend and impression bounds are parsed and returned as structured JSON objects."""
+    # Standard security check for sql injection on string parameters
+    if "'" in advertiser_name:
+        return json.dumps({"status": "error", "message": "Invalid character in advertiser_name."})
+        
+    if region:
+        if "'" in region:
+            return json.dumps({"status": "error", "message": "Invalid character in region."})
+            
+    if start_date:
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", start_date):
+            return json.dumps({"status": "error", "message": "start_date must be in YYYY-MM-DD format."})
+            
+    if end_date:
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", end_date):
+            return json.dumps({"status": "error", "message": "end_date must be in YYYY-MM-DD format."})
+            
+    if ad_type:
+        if "'" in ad_type:
+            return json.dumps({"status": "error", "message": "Invalid character in ad_type."})
+
+    if bq_client is None:
+        return json.dumps({
+            "status": "error",
+            "message": "BigQuery client is not initialized. Check credentials."
+        })
+        
+    conditions = [f"advertiser_name LIKE '%{advertiser_name}%'"]
+    
+    if region:
+        conditions.append(f"regions = '{region}'")
+        
+    if start_date:
+        conditions.append(f"date_range_start >= '{start_date}'")
+        
+    if end_date:
+        conditions.append(f"date_range_end <= '{end_date}'")
+        
+    if ad_type:
+        conditions.append(f"ad_type = '{ad_type}'")
+        
+    where_clause = " AND ".join(conditions)
+    
+    sql = f"""
+        SELECT 
+            ad_id,
+            ad_url,
+            ad_type,
+            regions,
+            advertiser_name,
+            impressions,
+            spend_range_min_usd,
+            spend_range_max_usd,
+            date_range_start,
+            date_range_end,
+            num_of_days
+        FROM `bigquery-public-data.google_political_ads.creative_stats`
+        WHERE {where_clause}
+        ORDER BY date_range_start DESC
+        LIMIT {limit}
+    """
+    
+    try:
+        query_job = bq_client.query(sql)
+        ads = []
+        for row in query_job:
+            row_dict = {}
+            for key, val in row.items():
+                if hasattr(val, "isoformat"):
+                    row_dict[key] = val.isoformat()
+                else:
+                    row_dict[key] = val
+                    
+            # Parse ranges as JSON objects
+            spend_range = {
+                "min": row_dict.get("spend_range_min_usd"),
+                "max": row_dict.get("spend_range_max_usd")
+            }
+            impressions_range = _parse_impressions_range(row_dict.get("impressions"))
+            
+            ads.append({
+                "ad_id": row_dict.get("ad_id"),
+                "ad_url": row_dict.get("ad_url"),
+                "ad_type": row_dict.get("ad_type"),
+                "regions": row_dict.get("regions"),
+                "advertiser_name": row_dict.get("advertiser_name"),
+                "spend_range_usd": spend_range,
+                "impressions_range": impressions_range,
+                "date_range_start": row_dict.get("date_range_start"),
+                "date_range_end": row_dict.get("date_range_end"),
+                "num_of_days": row_dict.get("num_of_days")
+            })
+            
+        return json.dumps({
+            "status": "success",
+            "count": len(ads),
+            "ads": ads
+        })
+    except Exception as e:
+        log.exception(f"Error searching advertiser ads: {sql}")
         return json.dumps({
             "status": "error",
             "message": str(e)

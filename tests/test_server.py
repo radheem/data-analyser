@@ -173,3 +173,108 @@ def test_get_top_advertisers_success():
         assert "LIMIT 5" in called_sql
     finally:
         src.server.bq_client = original_client
+
+def test_search_advertiser_ads_success():
+    """Test search_advertiser_ads query building, filtering, and parsing."""
+    import src.server
+    
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    
+    mock_row = MagicMock()
+    mock_row.items.return_value = [
+        ("ad_id", "CR999"),
+        ("ad_type", "VIDEO"),
+        ("regions", "US"),
+        ("advertiser_name", "HARRIS FOR PRESIDENT"),
+        ("impressions", "10000-50000"),
+        ("spend_range_min_usd", 1000),
+        ("spend_range_max_usd", 5000),
+        ("date_range_start", "2024-01-01"),
+        ("date_range_end", "2024-01-10")
+    ]
+    mock_query_job.__iter__.return_value = [mock_row]
+    mock_client.query.return_value = mock_query_job
+    
+    original_client = src.server.bq_client
+    src.server.bq_client = mock_client
+    
+    try:
+        result = src.server.search_advertiser_ads(
+            advertiser_name="HARRIS FOR PRESIDENT",
+            limit=5,
+            region="US",
+            start_date="2024-01-01",
+            end_date="2024-01-15",
+            ad_type="VIDEO"
+        )
+        data = json.loads(result)
+        
+        assert data["status"] == "success"
+        assert len(data["ads"]) == 1
+        assert data["ads"][0]["ad_id"] == "CR999"
+        
+        # Verify spend & impression range formatting
+        assert data["ads"][0]["spend_range_usd"]["min"] == 1000
+        assert data["ads"][0]["spend_range_usd"]["max"] == 5000
+        assert data["ads"][0]["impressions_range"]["min"] == 10000
+        assert data["ads"][0]["impressions_range"]["max"] == 50000
+        
+        called_sql = mock_client.query.call_args[0][0]
+        assert "advertiser_name LIKE '%HARRIS FOR PRESIDENT%'" in called_sql
+        assert "regions = 'US'" in called_sql
+        assert "date_range_start >= '2024-01-01'" in called_sql
+        assert "date_range_end <= '2024-01-15'" in called_sql
+        assert "ad_type = 'VIDEO'" in called_sql
+    finally:
+        src.server.bq_client = original_client
+
+def test_search_advertiser_ads_validation_errors():
+    """Test search_advertiser_ads blocks SQL injection and bad formats."""
+    import src.server
+    
+    # We don't need a real client because validation runs first
+    # 1. SQL injection in name
+    result = src.server.search_advertiser_ads(advertiser_name="Name' OR 1=1")
+    assert "Invalid character" in json.loads(result)["message"]
+    
+    # 2. SQL injection in region
+    result = src.server.search_advertiser_ads(advertiser_name="Valid", region="US'")
+    assert "Invalid character" in json.loads(result)["message"]
+    
+    # 3. Invalid start_date format
+    result = src.server.search_advertiser_ads(advertiser_name="Valid", start_date="01-01-2024")
+    assert "YYYY-MM-DD format" in json.loads(result)["message"]
+    
+    # 4. Invalid end_date format
+    result = src.server.search_advertiser_ads(advertiser_name="Valid", end_date="2024/01/01")
+    assert "YYYY-MM-DD format" in json.loads(result)["message"]
+    
+    # 5. SQL injection in ad_type
+    result = src.server.search_advertiser_ads(advertiser_name="Valid", ad_type="VIDEO'")
+    assert "Invalid character" in json.loads(result)["message"]
+
+def test_parse_impressions_range():
+    """Test _parse_impressions_range helper parses all formatted inputs correctly."""
+    from src.server import _parse_impressions_range
+    
+    # Empty cases
+    assert _parse_impressions_range(None) == {"min": None, "max": None}
+    assert _parse_impressions_range("") == {"min": None, "max": None}
+    
+    # Less than / Less than or equal
+    assert _parse_impressions_range("≤ 10,000") == {"min": 0, "max": 10000}
+    assert _parse_impressions_range("<= 5,000") == {"min": 0, "max": 5000}
+    
+    # Greater than / plus
+    assert _parse_impressions_range("≥ 1,000,000") == {"min": 1000000, "max": None}
+    assert _parse_impressions_range(">= 5000") == {"min": 5000, "max": None}
+    assert _parse_impressions_range("250000+") == {"min": 250000, "max": None}
+    
+    # Ranges
+    assert _parse_impressions_range("10000-50000") == {"min": 10000, "max": 50000}
+    assert _parse_impressions_range("abc-def") == {"min": None, "max": None}
+    
+    # Single numbers / fallbacks
+    assert _parse_impressions_range("10000") == {"min": 10000, "max": 10000}
+    assert _parse_impressions_range("no digits here") == {"min": None, "max": None}
