@@ -26,7 +26,7 @@
 ## Phase 4: Containerized End-to-End Testing
 - [x] Task: Configure Docker Compose for Interactive Stdio (0fafbd1)
     - [ ] Implement: Update `deploy/docker-compose.yml` to include `stdin_open: true` and `tty: true`.
-- [ ] Task: Verify Container Execution
+- [x] Task: Verify Container Execution (997c11b)
     - [ ] Implement: Build and run the service via Docker Compose and check logs for "Successfully initialized BigQuery client."
 - [ ] Task: Run Host-Side Tests Against Container
     - [ ] Implement: Run `PYTHONPATH=. uv run pytest tests/` on the host to verify all mock and integration tests execute successfully.
