@@ -22,7 +22,7 @@ def _get_datasource_ref(datasource_name: str = "BigQuery") -> dict:
         "uid": datasource_name
     }
 
-def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None) -> dict:
+def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None, unit: str = None) -> dict:
     """Generate a Grafana Bar Chart panel JSON."""
     return {
         "id": id_num,
@@ -42,6 +42,11 @@ def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name:
             "x": 0,
             "y": 0
         },
+        "fieldConfig": {
+            "defaults": {
+                "unit": normalize_grafana_unit(unit)
+            }
+        },
         "options": {
             "orientation": "auto",
             "barRadius": 0,
@@ -56,7 +61,7 @@ def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name:
         }
     }
 
-def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None) -> dict:
+def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None, unit: str = None) -> dict:
     """Generate a Grafana Line Chart (timeseries) panel JSON."""
     return {
         "id": id_num,
@@ -99,7 +104,7 @@ def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name
                     "gradientMode": "none"
                 },
                 "color": { "mode": "palette-classic" },
-                "unit": "short"
+                "unit": normalize_grafana_unit(unit)
             }
         },
         "options": {
@@ -108,7 +113,7 @@ def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name
         }
     }
 
-def generate_pie_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None) -> dict:
+def generate_pie_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None, unit: str = None) -> dict:
     """Generate a Grafana Pie Chart panel JSON."""
     return {
         "id": id_num,
@@ -128,6 +133,11 @@ def generate_pie_chart_panel(id_num: int, title: str, sql: str, datasource_name:
             "x": 0,
             "y": 0
         },
+        "fieldConfig": {
+            "defaults": {
+                "unit": normalize_grafana_unit(unit)
+            }
+        },
         "options": {
             "reduceOptions": {
                 "values": False,
@@ -137,6 +147,49 @@ def generate_pie_chart_panel(id_num: int, title: str, sql: str, datasource_name:
             "pieType": "pie",
             "tooltip": { "mode": "single", "sort": "none" },
             "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] }
+        }
+    }
+
+def generate_stat_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None, unit: str = None) -> dict:
+    """Generate a Grafana Stat panel JSON (single number metric with auto sparkline)."""
+    return {
+        "id": id_num,
+        "type": "stat",
+        "title": title,
+        "datasource": _get_datasource_ref(datasource_name),
+        "targets": [
+            {
+                "format": "table",
+                "rawSql": sql,
+                "refId": "A"
+            }
+        ],
+        "gridPos": grid_pos or {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 0
+        },
+        "fieldConfig": {
+            "defaults": {
+                "color": {
+                    "mode": "thresholds"
+                },
+                "unit": normalize_grafana_unit(unit)
+            }
+        },
+        "options": {
+            "reduceOptions": {
+                "values": False,
+                "calcs": ["lastNotNull"],
+                "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "value",
+            "wideLayout": True,
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto"
         }
     }
 

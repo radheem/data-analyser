@@ -18,7 +18,7 @@ def test_generate_base_dashboard():
     assert dashboard["schemaVersion"] >= 39
 
 def test_generate_bar_chart_panel():
-    panel = generate_bar_chart_panel(1, "Test Bar Chart", "SELECT * FROM test")
+    panel = generate_bar_chart_panel(1, "Test Bar Chart", "SELECT * FROM test", unit="USD")
     assert panel["id"] == 1
     assert panel["type"] == "barchart"
     assert panel["title"] == "Test Bar Chart"
@@ -26,9 +26,10 @@ def test_generate_bar_chart_panel():
     assert panel["targets"][0]["format"] == "table"
     assert panel["options"]["xTickLabelRotation"] == -45
     assert panel["options"]["xTickLabelMaxLength"] == 25
+    assert panel["fieldConfig"]["defaults"]["unit"] == "currencyUSD"
 
 def test_generate_line_chart_panel():
-    panel = generate_line_chart_panel(2, "Test Line Chart", "SELECT * FROM test")
+    panel = generate_line_chart_panel(2, "Test Line Chart", "SELECT * FROM test", unit="EUR")
     assert panel["id"] == 2
     assert panel["type"] == "timeseries"
     assert panel["title"] == "Test Line Chart"
@@ -36,14 +37,16 @@ def test_generate_line_chart_panel():
     assert panel["targets"][0]["format"] == "table"
     assert panel["transformations"][0]["id"] == "convertFieldType"
     assert panel["transformations"][0]["options"]["fields"]["time"]["destinationType"] == "time"
+    assert panel["fieldConfig"]["defaults"]["unit"] == "currencyEUR"
 
 def test_generate_pie_chart_panel():
-    panel = generate_pie_chart_panel(3, "Test Pie Chart", "SELECT * FROM test")
+    panel = generate_pie_chart_panel(3, "Test Pie Chart", "SELECT * FROM test", unit="percent")
     assert panel["id"] == 3
     assert panel["type"] == "piechart"
     assert panel["title"] == "Test Pie Chart"
     assert panel["targets"][0]["rawSql"] == "SELECT * FROM test"
     assert panel["targets"][0]["format"] == "table"
+    assert panel["fieldConfig"]["defaults"]["unit"] == "percent"
 
 def test_generate_table_panel():
     panel = generate_table_panel(4, "Test Table", "SELECT * FROM test")
@@ -52,6 +55,20 @@ def test_generate_table_panel():
     assert panel["title"] == "Test Table"
     assert panel["targets"][0]["rawSql"] == "SELECT * FROM test"
     assert panel["targets"][0]["format"] == "table"
+
+def test_generate_stat_panel():
+    """Verify stat panel generator correctly packages single metric visualization with sparkline."""
+    from src.grafana_generators import generate_stat_panel
+    
+    panel = generate_stat_panel(5, "Total Target Ads", "SELECT count(*) FROM stats", unit="GBP")
+    assert panel["id"] == 5
+    assert panel["type"] == "stat"
+    assert panel["title"] == "Total Target Ads"
+    assert panel["targets"][0]["rawSql"] == "SELECT count(*) FROM stats"
+    assert panel["fieldConfig"]["defaults"]["unit"] == "currencyGBP"
+    assert panel["options"]["graphMode"] == "area"  # Sparkline mode
+    assert panel["options"]["textMode"] == "value"
+
 
 def test_calculate_next_grid_position_empty():
     """Verify first panel placement for both half and full width."""
