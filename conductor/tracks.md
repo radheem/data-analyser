@@ -7,5 +7,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [x] **Track: implement tools for mcp**
   *Link: [./tracks/implement_tools_20260628/](./tracks/implement_tools_20260628/)*
 
-- [ ] **Track: Migrate to Official Grafana MCP**
+- [x] **Track: Migrate to Official Grafana MCP**
   *Link: [./tracks/migrate_to_grafana_mcp_20260703/](./tracks/migrate_to_grafana_mcp_20260703/)*

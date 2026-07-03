@@ -100,7 +100,6 @@ def test_query_ads_success():
         assert len(data["rows"]) == 1
         assert data["rows"][0]["ad_id"] == "CR123"
         mock_client.query.assert_called_once()
-        # Verify query had LIMIT 10 preserved
         called_sql = mock_client.query.call_args[0][0]
         assert "LIMIT 10" in called_sql
     finally:
@@ -163,7 +162,6 @@ def test_get_top_advertisers_success():
         assert data["status"] == "success"
         assert len(data["advertisers"]) == 1
         assert data["advertisers"][0]["advertiser_name"] == "BIG SPENDER INC"
-        # Verify range-based metric formatted as JSON object
         assert data["advertisers"][0]["spend_range_usd"]["min"] == 1000000
         assert data["advertisers"][0]["spend_range_usd"]["max"] == 1500000
         
@@ -214,7 +212,6 @@ def test_search_advertiser_ads_success():
         assert len(data["ads"]) == 1
         assert data["ads"][0]["ad_id"] == "CR999"
         
-        # Verify spend & impression range formatting
         assert data["ads"][0]["spend_range_usd"]["min"] == 1000
         assert data["ads"][0]["spend_range_usd"]["max"] == 5000
         assert data["ads"][0]["impressions_range"]["min"] == 10000
@@ -233,24 +230,18 @@ def test_search_advertiser_ads_validation_errors():
     """Test search_advertiser_ads blocks SQL injection and bad formats."""
     import src.server
     
-    # We don't need a real client because validation runs first
-    # 1. SQL injection in name
     result = src.server.search_advertiser_ads(advertiser_name="Name' OR 1=1")
     assert "Invalid character" in json.loads(result)["message"]
     
-    # 2. SQL injection in region
     result = src.server.search_advertiser_ads(advertiser_name="Valid", region="US'")
     assert "Invalid character" in json.loads(result)["message"]
     
-    # 3. Invalid start_date format
     result = src.server.search_advertiser_ads(advertiser_name="Valid", start_date="01-01-2024")
     assert "YYYY-MM-DD format" in json.loads(result)["message"]
     
-    # 4. Invalid end_date format
     result = src.server.search_advertiser_ads(advertiser_name="Valid", end_date="2024/01/01")
     assert "YYYY-MM-DD format" in json.loads(result)["message"]
     
-    # 5. SQL injection in ad_type
     result = src.server.search_advertiser_ads(advertiser_name="Valid", ad_type="VIDEO'")
     assert "Invalid character" in json.loads(result)["message"]
 
@@ -258,149 +249,21 @@ def test_parse_impressions_range():
     """Test _parse_impressions_range helper parses all formatted inputs correctly."""
     from src.server import _parse_impressions_range
     
-    # Empty cases
     assert _parse_impressions_range(None) == {"min": None, "max": None}
     assert _parse_impressions_range("") == {"min": None, "max": None}
     
-    # Less than / Less than or equal
     assert _parse_impressions_range("≤ 10,000") == {"min": 0, "max": 10000}
     assert _parse_impressions_range("<= 5,000") == {"min": 0, "max": 5000}
     
-    # Greater than / plus
     assert _parse_impressions_range("≥ 1,000,000") == {"min": 1000000, "max": None}
     assert _parse_impressions_range(">= 5000") == {"min": 5000, "max": None}
     assert _parse_impressions_range("250000+") == {"min": 250000, "max": None}
     
-    # Ranges
     assert _parse_impressions_range("10000-50000") == {"min": 10000, "max": 50000}
     assert _parse_impressions_range("abc-def") == {"min": None, "max": None}
     
-    # Single numbers / fallbacks
     assert _parse_impressions_range("10000") == {"min": 10000, "max": 10000}
     assert _parse_impressions_range("no digits here") == {"min": None, "max": None}
-
-@patch("requests.post")
-def test_create_grafana_dashboard_success(mock_post):
-    """Test create_grafana_dashboard tool on successful POST to Grafana API."""
-    import src.server
-    
-    # Mock requests.post response
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "status": "success",
-        "url": "/d/test-uid/test-slug",
-        "uid": "test-uid"
-    }
-    mock_post.return_value = mock_response
-    
-    # Mock BigQuery client to bypass pre-flight
-    mock_client = MagicMock()
-    mock_query_job = MagicMock()
-    mock_query_job.__iter__.return_value = [{"col": 1}]
-    mock_client.query.return_value = mock_query_job
-    
-    original_client = src.server.bq_client
-    src.server.bq_client = mock_client
-    
-    try:
-        # Call the tool (SQL, chart_type, title)
-        result = src.server.create_grafana_dashboard(
-            sql="SELECT * FROM `creative_stats` LIMIT 10",
-            chart_type="barchart",
-            title="My Test Dashboard"
-        )
-        
-        data = json.loads(result)
-        assert data["status"] == "success"
-        assert "http://localhost:3000/d/test-uid/test-slug" in data["dashboard_url"]
-        
-        # Verify post is called with expected payload
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        assert "/api/dashboards/db" in args[0]
-        assert "dashboard" in kwargs["json"]
-        assert kwargs["json"]["dashboard"]["title"] == "My Test Dashboard"
-        assert kwargs["json"]["dashboard"]["panels"][0]["type"] == "barchart"
-        
-    finally:
-        src.server.bq_client = original_client
-
-@patch("requests.post")
-def test_create_grafana_dashboard_preflight_failure(mock_post):
-    """Test create_grafana_dashboard tool aborts and returns error if pre-flight query fails."""
-    import src.server
-    
-    # Mock BigQuery client to raise exception on query execution
-    mock_client = MagicMock()
-    mock_client.query.side_effect = Exception("BigQuery SQL syntax error.")
-    
-    original_client = src.server.bq_client
-    src.server.bq_client = mock_client
-    
-    try:
-        result = src.server.create_grafana_dashboard(
-            sql="SELECT INVALID_COLUMN FROM `creative_stats`",
-            chart_type="barchart",
-            title="My Bad Dashboard"
-        )
-        
-        data = json.loads(result)
-        assert data["status"] == "error"
-        assert "BigQuery SQL syntax error" in data["message"]
-        
-        # Verify requests.post was NEVER called (aborted early!)
-        mock_post.assert_not_called()
-        
-    finally:
-        src.server.bq_client = original_client
-
-@patch("requests.post")
-@patch("src.grafana_generators.generate_bar_chart_panel")
-def test_create_grafana_dashboard_fallback_to_table(mock_gen_bar, mock_post):
-    """Test create_grafana_dashboard tool falls back to a table panel if chart generation fails."""
-    import src.server
-    
-    # Mock the bar chart panel generator to raise an error
-    mock_gen_bar.side_effect = Exception("Mocked generation failure.")
-    
-    # Mock requests.post response
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "status": "success",
-        "url": "/d/test-uid/test-slug",
-        "uid": "test-uid"
-    }
-    mock_post.return_value = mock_response
-    
-    # Mock BigQuery client to bypass pre-flight
-    mock_client = MagicMock()
-    mock_query_job = MagicMock()
-    mock_query_job.__iter__.return_value = [{"col": 1}]
-    mock_client.query.return_value = mock_query_job
-    
-    original_client = src.server.bq_client
-    src.server.bq_client = mock_client
-    
-    try:
-        result = src.server.create_grafana_dashboard(
-            sql="SELECT * FROM `creative_stats` LIMIT 10",
-            chart_type="barchart",
-            title="My Fallback Dashboard"
-        )
-        
-        data = json.loads(result)
-        assert data["status"] == "success"
-        assert data["resolved_chart_type"] == "table"
-        
-        # Verify post is called with table type
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        assert kwargs["json"]["dashboard"]["panels"][0]["type"] == "table"
-        
-    finally:
-        src.server.bq_client = original_client
 
 @patch("os.path.exists")
 def test_setup_grafana_datasource(mock_exists):
@@ -408,14 +271,12 @@ def test_setup_grafana_datasource(mock_exists):
     from unittest.mock import mock_open
     import src.server
     
-    # Mock both gcp-creds.json and provisioning directory to exist
     mock_exists.side_effect = lambda path: True
     
     m_open = mock_open(read_data='{"client_email": "test@gcp.com", "project_id": "test-project", "private_key": "-----BEGIN PRIVATE KEY-----"}')
     with patch("builtins.open", m_open):
         src.server.setup_grafana_datasource()
         
-    # Verify open was called to write the yaml file and the pem file
     m_open.assert_any_call("deploy/grafana/provisioning/datasources/bigquery.yaml", "w")
     m_open.assert_any_call("deploy/grafana/google-key.pem", "w")
     write_args = [call[0][0] for call in m_open().write.call_args_list]
@@ -424,44 +285,56 @@ def test_setup_grafana_datasource(mock_exists):
     assert "defaultProject: test-project" in joined_writes
     assert "-----BEGIN PRIVATE KEY-----" in joined_writes
 
+@patch("os.path.exists")
+@patch("os.makedirs")
+@patch("requests.get")
 @patch("requests.post")
-def test_create_grafana_dashboard_sql_rewriter(mock_post):
-    """Test create_grafana_dashboard tool automatically rewrites DATE as time to TIMESTAMP."""
+def test_ensure_grafana_service_account(mock_post, mock_get, mock_makedirs, mock_exists):
+    """Test ensure_grafana_service_account creates a service account and saves the token."""
+    from unittest.mock import mock_open
     import src.server
     
-    # Mock requests.post response
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "status": "success",
-        "url": "/d/test-uid/test-slug",
-        "uid": "test-uid"
-    }
-    mock_post.return_value = mock_response
+    # Mock exists: config_dir exists, but token file does NOT exist yet
+    mock_exists.side_effect = lambda path: False if "token" in path else True
     
-    # Mock BigQuery client to bypass pre-flight
-    mock_client = MagicMock()
-    mock_query_job = MagicMock()
-    mock_query_job.__iter__.return_value = [{"col": 1}]
-    mock_client.query.return_value = mock_query_job
+    # Mock health check (get) to be 200
+    mock_health = MagicMock()
+    mock_health.status_code = 200
+    mock_get.return_value = mock_health
     
-    original_client = src.server.bq_client
-    src.server.bq_client = mock_client
+    # Mock post response for creating SA (status 201) and token (status 200)
+    mock_sa_res = MagicMock()
+    mock_sa_res.status_code = 201
+    mock_sa_res.json.return_value = {"id": 42}
     
-    try:
-        src.server.create_grafana_dashboard(
-            sql="SELECT date_range_start as time FROM `creative_stats`",
-            chart_type="timeseries",
-            title="Rewrite Test"
-        )
+    mock_token_res = MagicMock()
+    mock_token_res.status_code = 200
+    mock_token_res.json.return_value = {"key": "glsa_mocked_token_key"}
+    
+    mock_post.side_effect = [mock_sa_res, mock_token_res]
+    
+    m_open = mock_open()
+    with patch("builtins.open", m_open):
+        src.server.ensure_grafana_service_account()
         
-        # Verify post is called with rewritten SQL
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        raw_sql = kwargs["json"]["dashboard"]["panels"][0]["targets"][0]["rawSql"]
-        assert "TIMESTAMP(date_range_start) as time" in raw_sql
-        
-    finally:
-        src.server.bq_client = original_client
+    # Verify we wrote the token
+    m_open.assert_called_with("/app/mcp-config/token", "w")
+    m_open().write.assert_called_once_with("glsa_mocked_token_key")
+
+@patch("os.path.exists")
+@patch("os.makedirs")
+@patch("requests.get")
+def test_ensure_grafana_service_account_already_exists(mock_get, mock_makedirs, mock_exists):
+    """Test ensure_grafana_service_account early-exits if the token file already exists."""
+    import src.server
+    
+    # Mock exists: both config_dir and token file exist
+    mock_exists.return_value = True
+    
+    src.server.ensure_grafana_service_account()
+    
+    # Verify health check was NEVER called
+    mock_get.assert_not_called()
+
 
 

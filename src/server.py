@@ -4,10 +4,11 @@ import json
 import logging
 import hashlib
 import requests
+import time
+import threading
 from mcp.server.fastmcp import FastMCP
 from google.cloud import bigquery
 from google.auth.exceptions import DefaultCredentialsError
-from src import grafana_generators
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("political-ads-mcp")
@@ -55,7 +56,107 @@ datasources:
         except Exception as e:
             log.warning(f"Failed to auto-configure Grafana datasource: {e}")
 
+def ensure_grafana_service_account():
+    """Ensure that a Grafana Service Account exists and generate a token, saving it persistently."""
+    config_dir = "/app/mcp-config"
+    token_path = os.path.join(config_dir, "token")
+    
+    # Check if we are running in docker or local
+    if not os.path.exists(config_dir):
+        # Fallback to a local folder for development/testing outside of Docker
+        config_dir = "deploy/grafana/mcp-config"
+        token_path = os.path.join(config_dir, "token")
+        
+    os.makedirs(config_dir, exist_ok=True)
+    
+    if os.path.exists(token_path):
+        log.info(f"Persistent Grafana Service Account Token already exists at {token_path}")
+        return
+        
+    # Get internal/external Grafana API URL
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://grafana:3000")
+    
+    log.info(f"Waiting for Grafana to be healthy at {grafana_api_url}...")
+    
+    # Poll Grafana API health endpoint
+    health_url = f"{grafana_api_url.rstrip('/')}/api/health"
+    max_retries = 30
+    for i in range(max_retries):
+        try:
+            res = requests.get(health_url, timeout=3)
+            if res.status_code == 200:
+                log.info("Grafana is healthy and ready.")
+                break
+        except Exception:
+            pass
+        log.info(f"Grafana not ready yet, retrying... ({i+1}/{max_retries})")
+        time.sleep(2)
+    else:
+        log.warning("Grafana did not become healthy in time. Skipping service account provisioning.")
+        return
+
+    # Create Service Account
+    # Since anonymous access with Admin role is enabled locally, we don't need authentication header
+    sa_url = f"{grafana_api_url.rstrip('/')}/api/serviceaccounts"
+    sa_payload = {
+        "name": "mcp-sa",
+        "role": "Admin",
+        "isDisabled": False
+    }
+    
+    try:
+        log.info("Creating Grafana Service Account 'mcp-sa'...")
+        res = requests.post(sa_url, json=sa_payload, timeout=10)
+        
+        sa_id = None
+        if res.status_code == 201:
+            sa_data = res.json()
+            sa_id = sa_data.get("id")
+            log.info(f"Created Service Account with ID: {sa_id}")
+        elif res.status_code == 409 or "already exists" in res.text:
+            log.info("Service account 'mcp-sa' already exists, searching for ID...")
+            search_res = requests.get(sa_url, timeout=10)
+            if search_res.status_code == 200:
+                accounts = search_res.json()
+                for acct in accounts:
+                    if acct.get("name") == "mcp-sa":
+                        sa_id = acct.get("id")
+                        log.info(f"Found existing Service Account with ID: {sa_id}")
+                        break
+        else:
+            log.warning(f"Failed to create/find service account: {res.status_code} - {res.text}")
+            return
+            
+        if not sa_id:
+            log.warning("Could not resolve Service Account ID.")
+            return
+            
+        # Generate token for the Service Account
+        token_url = f"{sa_url}/{sa_id}/tokens"
+        token_payload = {
+            "name": "mcp-sa-token"
+        }
+        
+        log.info(f"Generating token for Service Account ID {sa_id}...")
+        token_res = requests.post(token_url, json=token_payload, timeout=10)
+        if token_res.status_code == 200:
+            token_data = token_res.json()
+            token = token_data.get("key")
+            if token:
+                with open(token_path, "w") as ft:
+                    ft.write(token)
+                log.info(f"Successfully saved persistent Service Account Token to {token_path}")
+            else:
+                log.warning("No token key returned from token endpoint.")
+        else:
+            log.warning(f"Failed to generate Service Account Token: {token_res.status_code} - {token_res.text}")
+            
+    except Exception as e:
+        log.warning(f"Failed to auto-configure Grafana Service Account: {e}")
+
+# Run provisioning steps
 setup_grafana_datasource()
+threading.Thread(target=ensure_grafana_service_account, daemon=True).start()
 
 # Instantiate the FastMCP server based on transport env
 transport = os.environ.get("MCP_TRANSPORT", "stdio")
@@ -85,7 +186,6 @@ def ping_bigquery() -> str:
         
     try:
         query_job = bq_client.query("SELECT 1")
-        # Fetch the first row and its first column value
         for row in query_job:
             val = row[0]
             return json.dumps({
@@ -138,7 +238,6 @@ def query_ads(sql: str) -> str:
     Results are capped at a maximum of 100 rows.
     Example:
     - SELECT advertiser_name, SUM(spend_range_max_usd) FROM `bigquery-public-data.google_political_ads.creative_stats` GROUP BY advertiser_name LIMIT 10"""
-    # Security/Safety check: strictly read-only
     clean_sql = sql.strip()
     if not clean_sql.upper().startswith("SELECT") and not clean_sql.upper().startswith("WITH"):
         return json.dumps({
@@ -152,7 +251,6 @@ def query_ads(sql: str) -> str:
             "message": "BigQuery client is not initialized. Check credentials."
         })
         
-    # Enforce LIMIT 100 to prevent cost/egress spikes
     if "LIMIT" not in clean_sql.upper():
         clean_sql += " LIMIT 100"
         
@@ -160,10 +258,8 @@ def query_ads(sql: str) -> str:
         query_job = bq_client.query(clean_sql)
         results = []
         for row in query_job:
-            # Convert row mapping to dict
             row_dict = {}
             for key, val in row.items():
-                # Handle dates and timestamps serialization
                 if hasattr(val, "isoformat"):
                     row_dict[key] = val.isoformat()
                 else:
@@ -210,12 +306,10 @@ def get_top_advertisers(region: str = "US", limit: int = 10) -> str:
         query_job = bq_client.query(sql)
         advertisers = []
         for row in query_job:
-            # Construct row dict with custom formatting for ranges as JSON objects
             row_dict = {}
             for key, val in row.items():
                 row_dict[key] = val
                 
-            # Create structured JSON objects for the min/max spend range
             spend_range = {
                 "min": row_dict.get("total_min_spend_usd"),
                 "max": row_dict.get("total_max_spend_usd")
@@ -245,23 +339,18 @@ def _parse_impressions_range(impressions_str: str) -> dict:
     if not impressions_str:
         return {"min": None, "max": None}
         
-    import re
-    # Strip spaces and commas
     cleaned = impressions_str.replace(",", "").strip()
     
-    # Handle '≤ 10000'
     if "≤" in cleaned or "<=" in cleaned:
         nums = re.findall(r"\d+", cleaned)
         if nums:
             return {"min": 0, "max": int(nums[0])}
             
-    # Handle '≥ 1000000' or '1000000+'
     if "≥" in cleaned or ">=" in cleaned or "+" in cleaned:
         nums = re.findall(r"\d+", cleaned)
         if nums:
             return {"min": int(nums[0]), "max": None}
             
-    # Handle standard range '10000-50000'
     parts = cleaned.split("-")
     if len(parts) == 2:
         try:
@@ -269,7 +358,6 @@ def _parse_impressions_range(impressions_str: str) -> dict:
         except ValueError:
             pass
             
-    # Fallback to general digit extraction
     nums = re.findall(r"\d+", cleaned)
     if len(nums) == 2:
         return {"min": int(nums[0]), "max": int(nums[1])}
@@ -290,7 +378,6 @@ def search_advertiser_ads(
     """Search for political advertisements by advertiser name with optional filters.
     Supports filtering by region (e.g. US), date ranges, and ad format (VIDEO, TEXT, IMAGE).
     Spend and impression bounds are parsed and returned as structured JSON objects."""
-    # Standard security check for sql injection on string parameters
     if "'" in advertiser_name:
         return json.dumps({"status": "error", "message": "Invalid character in advertiser_name."})
         
@@ -362,7 +449,6 @@ def search_advertiser_ads(
                 else:
                     row_dict[key] = val
                     
-            # Parse ranges as JSON objects
             spend_range = {
                 "min": row_dict.get("spend_range_min_usd"),
                 "max": row_dict.get("spend_range_max_usd")
@@ -389,669 +475,6 @@ def search_advertiser_ads(
         })
     except Exception as e:
         log.exception(f"Error searching advertiser ads: {sql}")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-@mcp.tool()
-def create_grafana_dashboard(sql: str, chart_type: str, title: str, unit: str = None) -> str:
-    """Create a resilient Grafana dashboard containing a single panel of the specified chart type.
-    
-    Supported chart types:
-    - 'barchart': For comparing categorical data (e.g. spending by advertiser)
-    - 'timeseries': For time-based trends (e.g. daily spending)
-    - 'piechart': For proportional or distribution data
-    - 'stat': For single numeric metrics with auto sparkline trends (e.g. total ads count)
-    - 'table': For raw data lists
-    
-    Returns a JSON string containing the status, dashboard UID, and a direct URL to the created dashboard."""
-    # Ensure SQL is SELECT/WITH
-    clean_sql = sql.strip()
-    if not clean_sql.upper().startswith("SELECT") and not clean_sql.upper().startswith("WITH"):
-        return json.dumps({
-            "status": "error",
-            "message": "Security Error: Only read-only SELECT or WITH statements are allowed."
-        })
-        
-    # Pre-emptively rewrite raw DATE columns aliased as 'time' to TIMESTAMP(column)
-    # so that BigQuery returns a true TIMESTAMP, which Grafana natively recognizes on its time axis.
-    clean_sql = re.sub(r"\b(date_range_start|date_range_end)\s+as\s+time\b", r"TIMESTAMP(\1) as time", clean_sql, flags=re.IGNORECASE)
-    
-    # Pre-flight query execution check (using BigQuery dry_run to validate syntax/columns for $0 cost)
-    if bq_client is not None:
-        try:
-            job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
-            bq_client.query(clean_sql, job_config=job_config)
-        except Exception as bq_err:
-            log.exception(f"Pre-flight dry-run failed for query: {clean_sql}")
-            return json.dumps({
-                "status": "error",
-                "message": f"Pre-flight SQL Check Error: {str(bq_err)}"
-            })
-        
-    # Resolve the panel generator and type
-    panel_gen, resolved_type = _resolve_panel_generator_and_type(chart_type)
-
-    # Generate a deterministic UID from the title using sha256 to ensure consistent updating
-    uid = hashlib.sha256(title.encode('utf-8')).hexdigest()[:12]
-    
-    # Create the panel JSON
-    try:
-        if panel_gen == grafana_generators.generate_table_panel:
-            panel_json = panel_gen(id_num=1, title=title, sql=clean_sql)
-        else:
-            panel_json = panel_gen(id_num=1, title=title, sql=clean_sql, unit=unit)
-    except Exception as e:
-        log.exception(f"Failed to generate panel JSON for {resolved_type}. Falling back to table.")
-        panel_json = grafana_generators.generate_table_panel(id_num=1, title=title, sql=clean_sql)
-        resolved_type = "table"
-        
-    # Generate the base dashboard JSON wrapping the panel
-    dashboard_json = grafana_generators.generate_base_dashboard(uid=uid, title=title, panels=[panel_json])
-    
-    # Load Grafana configuration from environment variables
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_external_url = os.environ.get("GRAFANA_EXTERNAL_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-    
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-        
-    payload = {
-        "dashboard": dashboard_json,
-        "overwrite": True
-    }
-    
-    api_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
-    
-    try:
-        # Post to Grafana API
-        res = requests.post(api_endpoint, json=payload, headers=headers, timeout=10)
-        
-        if res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Grafana API returned status {res.status_code}: {res.text}"
-            })
-            
-        data = res.json()
-        dashboard_url = f"{grafana_external_url.rstrip('/')}{data.get('url')}"
-        
-        return json.dumps({
-            "status": "success",
-            "uid": uid,
-            "resolved_chart_type": resolved_type,
-            "dashboard_url": dashboard_url,
-            "message": f"Resilient dashboard '{title}' created successfully!"
-        })
-        
-    except Exception as e:
-        log.exception("Error creating Grafana dashboard")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-@mcp.tool()
-def list_grafana_dashboards() -> str:
-    """List all dashboards in Grafana that are tagged with 'mcp-generated'.
-
-    Returns a JSON string containing the status and a list of dashboard metadata (uid, title, and external URL)."""
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_external_url = os.environ.get("GRAFANA_EXTERNAL_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-
-    api_endpoint = f"{grafana_api_url.rstrip('/')}/api/search"
-    params = {"tag": "mcp-generated"}
-
-    try:
-        res = requests.get(api_endpoint, params=params, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Grafana API returned status {res.status_code}: {res.text}"
-            })
-
-        dashboards_data = res.json()
-        dashboards = []
-        for d in dashboards_data:
-            url = f"{grafana_external_url.rstrip('/')}{d.get('url', '')}"
-            dashboards.append({
-                "uid": d.get("uid"),
-                "title": d.get("title"),
-                "url": url
-            })
-
-        return json.dumps({
-            "status": "success",
-            "dashboards": dashboards
-        })
-
-    except Exception as e:
-        log.exception("Error listing Grafana dashboards")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-@mcp.tool()
-def get_grafana_dashboard(uid: str) -> str:
-    """Retrieve the full raw JSON model of an existing Grafana dashboard by its unique identifier (UID).
-
-    Returns a JSON string containing the status and the complete dashboard JSON structure."""
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-
-    api_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
-
-    try:
-        res = requests.get(api_endpoint, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Grafana API returned status {res.status_code}: {res.text}"
-            })
-
-        data = res.json()
-        dashboard_json = data.get("dashboard")
-        return json.dumps({
-            "status": "success",
-            "dashboard": dashboard_json
-        })
-
-    except Exception as e:
-        log.exception(f"Error retrieving Grafana dashboard with UID {uid}")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-@mcp.tool()
-def update_dashboard(uid: str, title: str = None, refresh: str = None) -> str:
-    """Update high-level metadata (such as title or refresh interval) of an existing dashboard.
-
-    Returns a JSON string containing the status and a success message."""
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-
-    # Step 1: Fetch the existing dashboard model
-    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
-    try:
-        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
-        if get_res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Failed to retrieve existing dashboard for update: {get_res.text}"
-            })
-        
-        dashboard_data = get_res.json()
-        dashboard_json = dashboard_data.get("dashboard")
-        
-        # Step 2: Modify metadata fields if provided
-        updated = False
-        if title is not None:
-            dashboard_json["title"] = title
-            updated = True
-        if refresh is not None:
-            dashboard_json["refresh"] = refresh
-            updated = True
-            
-        if not updated:
-            return json.dumps({
-                "status": "success",
-                "message": "No updates requested."
-            })
-            
-        # Step 3: Increment version and post back
-        dashboard_json["version"] = dashboard_json.get("version", 1) + 1
-        payload = {
-            "dashboard": dashboard_json,
-            "overwrite": True
-        }
-        
-        post_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
-        res = requests.post(post_endpoint, json=payload, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Grafana API update failed with status {res.status_code}: {res.text}"
-            })
-            
-        return json.dumps({
-            "status": "success",
-            "message": f"Dashboard '{dashboard_json.get('title')}' updated successfully!"
-        })
-
-    except Exception as e:
-        log.exception(f"Error updating Grafana dashboard with UID {uid}")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-@mcp.tool()
-def delete_grafana_dashboard(uid: str) -> str:
-    """Delete an existing dashboard by UID. For safety, only dashboards with the 'mcp-generated' tag can be deleted.
-
-    Returns a JSON string containing the status and a success message."""
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-
-    # Step 1: Fetch dashboard model to check tags for safety
-    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
-    try:
-        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
-        if get_res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Failed to retrieve dashboard to verify tags: {get_res.text}"
-            })
-        
-        dashboard_data = get_res.json()
-        dashboard_json = dashboard_data.get("dashboard", {})
-        tags = dashboard_json.get("tags", [])
-        
-        if "mcp-generated" not in tags:
-            return json.dumps({
-                "status": "error",
-                "message": "Safety Protection Error: Only dashboards tagged with 'mcp-generated' can be deleted."
-            })
-
-        # Step 2: Proceed with DELETE
-        delete_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
-        res = requests.delete(delete_endpoint, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Grafana API deletion failed with status {res.status_code}: {res.text}"
-            })
-            
-        return json.dumps({
-            "status": "success",
-            "message": f"Dashboard with UID '{uid}' was deleted successfully!"
-        })
-
-    except Exception as e:
-        log.exception(f"Error deleting Grafana dashboard with UID {uid}")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-def _resolve_panel_generator_and_type(chart_type: str):
-    """Internal helper to map a flexible chart type string to the correct JSON panel generator."""
-    chart_type_lower = chart_type.lower().replace(" ", "").replace("_", "")
-    if "bar" in chart_type_lower:
-        return grafana_generators.generate_bar_chart_panel, "barchart"
-    elif "line" in chart_type_lower or "time" in chart_type_lower or "trend" in chart_type_lower:
-        return grafana_generators.generate_line_chart_panel, "timeseries"
-    elif "pie" in chart_type_lower or "proportion" in chart_type_lower or "dist" in chart_type_lower:
-        return grafana_generators.generate_pie_chart_panel, "piechart"
-    elif "stat" in chart_type_lower or "number" in chart_type_lower or "metric" in chart_type_lower:
-        return grafana_generators.generate_stat_panel, "stat"
-    else:
-        return grafana_generators.generate_table_panel, "table"
-
-@mcp.tool()
-def create_multi_chart_dashboard(title: str, charts: list[dict]) -> str:
-    """Create a new Grafana dashboard containing multiple charts side-by-side or stacked using an auto-grid layout.
-
-    Arguments:
-    - title: Dashboard title.
-    - charts: List of dicts, each with keys: 'title', 'sql', 'chart_type', optional 'width' ('half' or 'full'), and optional 'unit' (e.g. 'USD', 'EUR', 'percent').
-
-    Returns a JSON string with the UID and direct URL to the created dashboard."""
-    # Step 1: Pre-flight checks on all charts
-    processed_charts = []
-    for c in charts:
-        c_title = c.get("title", "Chart")
-        c_sql = c.get("sql", "").strip()
-        c_type = c.get("chart_type", "table")
-        c_width = c.get("width", "half")
-        c_unit = c.get("unit")
-
-        if not c_sql.upper().startswith("SELECT") and not c_sql.upper().startswith("WITH"):
-            return json.dumps({
-                "status": "error",
-                "message": f"Security Error: Only read-only SELECT or WITH statements are allowed. Faulty query in '{c_title}'."
-            })
-
-        # Rewrite DATE as TIMESTAMP for timeseries queries
-        c_sql = re.sub(r"\b(date_range_start|date_range_end)\s+as\s+time\b", r"TIMESTAMP(\1) as time", c_sql, flags=re.IGNORECASE)
-
-        # Pre-flight query execution check
-        if bq_client is not None:
-            try:
-                job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
-                bq_client.query(c_sql, job_config=job_config)
-            except Exception as bq_err:
-                log.exception(f"Pre-flight dry-run failed for query: {c_sql}")
-                return json.dumps({
-                    "status": "error",
-                    "message": f"Pre-flight SQL Check Error inside '{c_title}': {str(bq_err)}"
-                })
-
-        processed_charts.append({
-            "title": c_title,
-            "sql": c_sql,
-            "chart_type": c_type,
-            "width": c_width,
-            "unit": c_unit
-        })
-
-    # Step 2: Build panels array using auto-grid calculation
-    uid = hashlib.sha256(title.encode('utf-8')).hexdigest()[:12]
-    panels = []
-    for idx, pc in enumerate(processed_charts, start=1):
-        panel_gen, resolved_type = _resolve_panel_generator_and_type(pc["chart_type"])
-        grid_pos = grafana_generators.calculate_next_grid_position(panels, pc["width"])
-        
-        try:
-            if panel_gen == grafana_generators.generate_table_panel:
-                panel_json = panel_gen(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos)
-            else:
-                panel_json = panel_gen(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos, unit=pc.get("unit"))
-        except Exception as e:
-            log.exception(f"Failed to generate panel JSON for {resolved_type}. Falling back to table.")
-            panel_json = grafana_generators.generate_table_panel(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos)
-            
-        panels.append(panel_json)
-
-    # Step 3: Package base dashboard JSON
-    dashboard_json = grafana_generators.generate_base_dashboard(uid=uid, title=title, panels=panels)
-
-    # Step 4: POST to Grafana API
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_external_url = os.environ.get("GRAFANA_EXTERNAL_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-
-    payload = {
-        "dashboard": dashboard_json,
-        "overwrite": True
-    }
-
-    api_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
-    try:
-        res = requests.post(api_endpoint, json=payload, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Grafana API returned status {res.status_code}: {res.text}"
-            })
-
-        data = res.json()
-        dashboard_url = f"{grafana_external_url.rstrip('/')}{data.get('url')}"
-
-        return json.dumps({
-            "status": "success",
-            "uid": uid,
-            "dashboard_url": dashboard_url,
-            "message": f"Multi-chart dashboard '{title}' created successfully!"
-        })
-
-    except Exception as e:
-        log.exception("Error creating multi-chart Grafana dashboard")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-@mcp.tool()
-def add_chart_to_dashboard(uid: str, chart_type: str, sql: str, title: str, width: str = "half", unit: str = None) -> str:
-    """Add a new chart panel to an existing Grafana dashboard using the auto-grid layout engine.
-
-    Returns a JSON string containing the status and a success message."""
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-
-    # Step 1: Pre-flight SQL check
-    clean_sql = sql.strip()
-    if not clean_sql.upper().startswith("SELECT") and not clean_sql.upper().startswith("WITH"):
-        return json.dumps({
-            "status": "error",
-            "message": "Security Error: Only read-only SELECT or WITH statements are allowed."
-        })
-
-    clean_sql = re.sub(r"\b(date_range_start|date_range_end)\s+as\s+time\b", r"TIMESTAMP(\1) as time", clean_sql, flags=re.IGNORECASE)
-
-    if bq_client is not None:
-        try:
-            job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
-            bq_client.query(clean_sql, job_config=job_config)
-        except Exception as bq_err:
-            log.exception(f"Pre-flight dry-run failed for query: {clean_sql}")
-            return json.dumps({
-                "status": "error",
-                "message": f"Pre-flight SQL Check Error: {str(bq_err)}"
-            })
-
-    # Step 2: Retrieve existing dashboard
-    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
-    try:
-        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
-        if get_res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Failed to retrieve existing dashboard: {get_res.text}"
-            })
-        
-        dashboard_data = get_res.json()
-        dashboard_json = dashboard_data.get("dashboard")
-        panels = dashboard_json.get("panels", [])
-
-        # Step 3: Compute new panel coordinate & ID
-        next_id = max([p.get("id", 0) for p in panels]) + 1 if panels else 1
-        grid_pos = grafana_generators.calculate_next_grid_position(panels, width)
-
-        panel_gen, resolved_type = _resolve_panel_generator_and_type(chart_type)
-        try:
-            if panel_gen == grafana_generators.generate_table_panel:
-                panel_json = panel_gen(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos)
-            else:
-                panel_json = panel_gen(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos, unit=unit)
-        except Exception as e:
-            log.exception(f"Failed to generate panel JSON. Falling back to table.")
-            panel_json = grafana_generators.generate_table_panel(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos)
-
-        panels.append(panel_json)
-        dashboard_json["panels"] = panels
-        dashboard_json["version"] = dashboard_json.get("version", 1) + 1
-
-        # Step 4: POST back to update
-        post_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
-        payload = {
-            "dashboard": dashboard_json,
-            "overwrite": True
-        }
-        
-        res = requests.post(post_endpoint, json=payload, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Grafana API update failed: {res.text}"
-            })
-
-        return json.dumps({
-            "status": "success",
-            "message": f"Chart '{title}' appended successfully to dashboard!"
-        })
-
-    except Exception as e:
-        log.exception(f"Error appending chart panel to dashboard {uid}")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-@mcp.tool()
-def delete_chart_from_dashboard(uid: str, chart_id: int) -> str:
-    """Delete an individual chart panel from an existing dashboard by the panel's unique ID.
-
-    Returns a JSON string containing the status and a success message."""
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-
-    # Step 1: Fetch existing dashboard
-    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
-    try:
-        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
-        if get_res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Failed to retrieve dashboard to delete chart: {get_res.text}"
-            })
-        
-        dashboard_data = get_res.json()
-        dashboard_json = dashboard_data.get("dashboard")
-        panels = dashboard_json.get("panels", [])
-
-        # Step 2: Filter out targeted panel
-        filtered_panels = [p for p in panels if p.get("id") != chart_id]
-        if len(filtered_panels) == len(panels):
-            return json.dumps({
-                "status": "error",
-                "message": f"Chart panel with ID {chart_id} not found on this dashboard."
-            })
-
-        dashboard_json["panels"] = filtered_panels
-        dashboard_json["version"] = dashboard_json.get("version", 1) + 1
-
-        # Step 3: POST back to save
-        post_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
-        payload = {
-            "dashboard": dashboard_json,
-            "overwrite": True
-        }
-        
-        res = requests.post(post_endpoint, json=payload, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Grafana API update failed during chart removal: {res.text}"
-            })
-
-        return json.dumps({
-            "status": "success",
-            "message": f"Chart panel with ID {chart_id} was deleted successfully from dashboard!"
-        })
-
-    except Exception as e:
-        log.exception(f"Error deleting chart panel from dashboard {uid}")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-@mcp.tool()
-def export_dashboard_json(uid: str) -> str:
-    """Fetch an existing dashboard by its UID, strip internal Grafana identifiers (database ID, version),
-    and save the clean, importable JSON to disk under the local mounted volume.
-
-    Returns a JSON string containing the status, path of the saved file, and a success message."""
-    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
-    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    if grafana_token:
-        headers["Authorization"] = f"Bearer {grafana_token}"
-
-    # Step 1: Fetch dashboard model
-    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
-    try:
-        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
-        if get_res.status_code != 200:
-            return json.dumps({
-                "status": "error",
-                "message": f"Failed to retrieve dashboard for exporting: {get_res.text}"
-            })
-        
-        dashboard_data = get_res.json()
-        dashboard_json = dashboard_data.get("dashboard")
-        if not dashboard_json:
-            return json.dumps({
-                "status": "error",
-                "message": "Retrieval error: No dashboard model found in response."
-            })
-
-        # Step 2: Strip internal identifiers for a clean, importable portable template
-        dashboard_json["id"] = None
-        if "version" in dashboard_json:
-            dashboard_json["version"] = 1
-
-        # Step 3: Ensure export directory exists
-        export_dir = "deploy/grafana/dashboards/exported_dashboards"
-        os.makedirs(export_dir, exist_ok=True)
-
-        # Step 4: Write cleaned JSON to file
-        file_path = os.path.join(export_dir, f"{uid}.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(dashboard_json, f, indent=2, ensure_ascii=False)
-
-        return json.dumps({
-            "status": "success",
-            "file_path": file_path,
-            "message": f"Clean dashboard JSON template exported successfully to '{file_path}'!"
-        })
-
-    except Exception as e:
-        log.exception(f"Error exporting dashboard with UID {uid}")
         return json.dumps({
             "status": "error",
             "message": str(e)

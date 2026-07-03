@@ -6,6 +6,8 @@ services:
     volumes:
       # Mount the JSON credentials file from the project root into the container
       - ../gcp-creds.json:/app/gcp-creds.json:ro
+      # Mount the shared configuration directory for persistent Service Account Token
+      - ./grafana/mcp-config:/app/mcp-config
     env_file:
       - ../.env
     environment:
@@ -32,3 +34,17 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_SECURITY_ALLOW_EMBEDDING=true
+
+  grafana-mcp:
+    image: grafana/mcp-grafana:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./grafana/mcp-config:/app/mcp-config:ro
+    environment:
+      - GRAFANA_URL=http://grafana:3000
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["while [ ! -f /app/mcp-config/token ]; do echo 'Waiting for service account token...'; sleep 1; done && export GRAFANA_SERVICE_ACCOUNT_TOKEN=$$(cat /app/mcp-config/token) && exec /app/mcp-grafana -t sse --address 0.0.0.0:8000"]
+    depends_on:
+      - grafana
+      - mcp-server
