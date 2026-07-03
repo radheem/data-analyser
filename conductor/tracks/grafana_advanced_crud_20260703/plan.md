@@ -11,12 +11,12 @@
     - [x] Implement `delete_grafana_dashboard` to fetch, verify the `mcp-generated` tag, and call the DELETE API.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Dashboard Retrieval & Lifecycle' (Protocol in workflow.md)
 
-## Phase 2: Dynamic Auto-Grid Layout System
-- [ ] Task: Upgrade JSON Generators for Width Formatting
-    - [ ] Modify all panel generators in `src/grafana_generators.py` to accept and apply `width` ("half" -> 12, "full" -> 24) and `x`, `y` coordinates.
-    - [ ] Write failing tests for the new `calculate_next_grid_position(panels, new_width)` helper algorithm.
-    - [ ] Implement the `calculate_next_grid_position` algorithm to handle side-by-side half-width pairing and full-width row stacking.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Dynamic Auto-Grid Layout System' (Protocol in workflow.md)
+## Phase 2: Dynamic Auto-Grid Layout System [checkpoint: 3604d8d]
+- [x] Task: Upgrade JSON Generators for Width Formatting (3604d8d)
+    - [x] Modify all panel generators in `src/grafana_generators.py` to accept and apply `width` ("half" -> 12, "full" -> 24) and `x`, `y` coordinates.
+    - [x] Write failing tests for the new `calculate_next_grid_position(panels, new_width)` helper algorithm.
+    - [x] Implement the `calculate_next_grid_position` algorithm to handle side-by-side half-width pairing and full-width row stacking.
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Dynamic Auto-Grid Layout System' (Protocol in workflow.md)
 
 ## Phase 3: Multi-Chart CRUD Operations
 - [ ] Task: Implement Multi-Chart Creation
