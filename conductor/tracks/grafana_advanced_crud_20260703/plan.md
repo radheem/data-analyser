@@ -1,15 +1,15 @@
 # Implementation Plan
 
-## Phase 1: Core Dashboard Retrieval & Lifecycle
-- [ ] Task: Implement Dashboard Listing and Retrieval
-    - [ ] Write failing tests for `list_grafana_dashboards` and `get_grafana_dashboard` tools.
-    - [ ] Implement `list_grafana_dashboards` using Grafana's `/api/search` endpoint filtering by `tags=mcp-generated`.
-    - [ ] Implement `get_grafana_dashboard` using Grafana's `/api/dashboards/uid/{uid}` endpoint.
-- [ ] Task: Implement Dashboard Metadata Updates and Safety Deletions
-    - [ ] Write failing tests for `update_dashboard` and `delete_grafana_dashboard` (including safety tag check).
-    - [ ] Implement `update_dashboard` to modify metadata and push via `/api/dashboards/db`.
-    - [ ] Implement `delete_grafana_dashboard` to fetch, verify the `mcp-generated` tag, and call the DELETE API.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Dashboard Retrieval & Lifecycle' (Protocol in workflow.md)
+## Phase 1: Core Dashboard Retrieval & Lifecycle [checkpoint: 6a86dc4]
+- [x] Task: Implement Dashboard Listing and Retrieval (6a86dc4)
+    - [x] Write failing tests for `list_grafana_dashboards` and `get_grafana_dashboard` tools.
+    - [x] Implement `list_grafana_dashboards` using Grafana's `/api/search` endpoint filtering by `tags=mcp-generated`.
+    - [x] Implement `get_grafana_dashboard` using Grafana's `/api/dashboards/uid/{uid}` endpoint.
+- [x] Task: Implement Dashboard Metadata Updates and Safety Deletions (6a86dc4)
+    - [x] Write failing tests for `update_dashboard` and `delete_grafana_dashboard` (including safety tag check).
+    - [x] Implement `update_dashboard` to modify metadata and push via `/api/dashboards/db`.
+    - [x] Implement `delete_grafana_dashboard` to fetch, verify the `mcp-generated` tag, and call the DELETE API.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Core Dashboard Retrieval & Lifecycle' (Protocol in workflow.md)
 
 ## Phase 2: Dynamic Auto-Grid Layout System
 - [ ] Task: Upgrade JSON Generators for Width Formatting
