@@ -721,6 +721,281 @@ def delete_grafana_dashboard(uid: str) -> str:
             "message": str(e)
         })
 
+def _resolve_panel_generator_and_type(chart_type: str):
+    """Internal helper to map a flexible chart type string to the correct JSON panel generator."""
+    chart_type_lower = chart_type.lower().replace(" ", "").replace("_", "")
+    if "bar" in chart_type_lower:
+        return grafana_generators.generate_bar_chart_panel, "barchart"
+    elif "line" in chart_type_lower or "time" in chart_type_lower or "trend" in chart_type_lower:
+        return grafana_generators.generate_line_chart_panel, "timeseries"
+    elif "pie" in chart_type_lower or "proportion" in chart_type_lower or "dist" in chart_type_lower:
+        return grafana_generators.generate_pie_chart_panel, "piechart"
+    else:
+        return grafana_generators.generate_table_panel, "table"
+
+@mcp.tool()
+def create_multi_chart_dashboard(title: str, charts: list[dict]) -> str:
+    """Create a new Grafana dashboard containing multiple charts side-by-side or stacked using an auto-grid layout.
+
+    Arguments:
+    - title: Dashboard title.
+    - charts: List of dicts, each with keys: 'title', 'sql', 'chart_type', and optional 'width' ('half' or 'full').
+
+    Returns a JSON string with the UID and direct URL to the created dashboard."""
+    # Step 1: Pre-flight checks on all charts
+    processed_charts = []
+    for c in charts:
+        c_title = c.get("title", "Chart")
+        c_sql = c.get("sql", "").strip()
+        c_type = c.get("chart_type", "table")
+        c_width = c.get("width", "half")
+
+        if not c_sql.upper().startswith("SELECT") and not c_sql.upper().startswith("WITH"):
+            return json.dumps({
+                "status": "error",
+                "message": f"Security Error: Only read-only SELECT or WITH statements are allowed. Faulty query in '{c_title}'."
+            })
+
+        # Rewrite DATE as TIMESTAMP for timeseries queries
+        c_sql = re.sub(r"\b(date_range_start|date_range_end)\s+as\s+time\b", r"TIMESTAMP(\1) as time", c_sql, flags=re.IGNORECASE)
+
+        # Pre-flight query execution check
+        if bq_client is not None:
+            try:
+                job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+                bq_client.query(c_sql, job_config=job_config)
+            except Exception as bq_err:
+                log.exception(f"Pre-flight dry-run failed for query: {c_sql}")
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Pre-flight SQL Check Error inside '{c_title}': {str(bq_err)}"
+                })
+
+        processed_charts.append({
+            "title": c_title,
+            "sql": c_sql,
+            "chart_type": c_type,
+            "width": c_width
+        })
+
+    # Step 2: Build panels array using auto-grid calculation
+    uid = hashlib.sha256(title.encode('utf-8')).hexdigest()[:12]
+    panels = []
+    for idx, pc in enumerate(processed_charts, start=1):
+        panel_gen, resolved_type = _resolve_panel_generator_and_type(pc["chart_type"])
+        grid_pos = grafana_generators.calculate_next_grid_position(panels, pc["width"])
+        
+        try:
+            panel_json = panel_gen(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos)
+        except Exception as e:
+            log.exception(f"Failed to generate panel JSON for {resolved_type}. Falling back to table.")
+            panel_json = grafana_generators.generate_table_panel(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos)
+            
+        panels.append(panel_json)
+
+    # Step 3: Package base dashboard JSON
+    dashboard_json = grafana_generators.generate_base_dashboard(uid=uid, title=title, panels=panels)
+
+    # Step 4: POST to Grafana API
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_external_url = os.environ.get("GRAFANA_EXTERNAL_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+
+    payload = {
+        "dashboard": dashboard_json,
+        "overwrite": True
+    }
+
+    api_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
+    try:
+        res = requests.post(api_endpoint, json=payload, headers=headers, timeout=10)
+        if res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Grafana API returned status {res.status_code}: {res.text}"
+            })
+
+        data = res.json()
+        dashboard_url = f"{grafana_external_url.rstrip('/')}{data.get('url')}"
+
+        return json.dumps({
+            "status": "success",
+            "uid": uid,
+            "dashboard_url": dashboard_url,
+            "message": f"Multi-chart dashboard '{title}' created successfully!"
+        })
+
+    except Exception as e:
+        log.exception("Error creating multi-chart Grafana dashboard")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
+@mcp.tool()
+def add_chart_to_dashboard(uid: str, chart_type: str, sql: str, title: str, width: str = "half") -> str:
+    """Add a new chart panel to an existing Grafana dashboard using the auto-grid layout engine.
+
+    Returns a JSON string containing the status and a success message."""
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+
+    # Step 1: Pre-flight SQL check
+    clean_sql = sql.strip()
+    if not clean_sql.upper().startswith("SELECT") and not clean_sql.upper().startswith("WITH"):
+        return json.dumps({
+            "status": "error",
+            "message": "Security Error: Only read-only SELECT or WITH statements are allowed."
+        })
+
+    clean_sql = re.sub(r"\b(date_range_start|date_range_end)\s+as\s+time\b", r"TIMESTAMP(\1) as time", clean_sql, flags=re.IGNORECASE)
+
+    if bq_client is not None:
+        try:
+            job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+            bq_client.query(clean_sql, job_config=job_config)
+        except Exception as bq_err:
+            log.exception(f"Pre-flight dry-run failed for query: {clean_sql}")
+            return json.dumps({
+                "status": "error",
+                "message": f"Pre-flight SQL Check Error: {str(bq_err)}"
+            })
+
+    # Step 2: Retrieve existing dashboard
+    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
+    try:
+        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
+        if get_res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to retrieve existing dashboard: {get_res.text}"
+            })
+        
+        dashboard_data = get_res.json()
+        dashboard_json = dashboard_data.get("dashboard")
+        panels = dashboard_json.get("panels", [])
+
+        # Step 3: Compute new panel coordinate & ID
+        next_id = max([p.get("id", 0) for p in panels]) + 1 if panels else 1
+        grid_pos = grafana_generators.calculate_next_grid_position(panels, width)
+
+        panel_gen, resolved_type = _resolve_panel_generator_and_type(chart_type)
+        try:
+            panel_json = panel_gen(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos)
+        except Exception as e:
+            log.exception(f"Failed to generate panel JSON. Falling back to table.")
+            panel_json = grafana_generators.generate_table_panel(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos)
+
+        panels.append(panel_json)
+        dashboard_json["panels"] = panels
+        dashboard_json["version"] = dashboard_json.get("version", 1) + 1
+
+        # Step 4: POST back to update
+        post_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
+        payload = {
+            "dashboard": dashboard_json,
+            "overwrite": True
+        }
+        
+        res = requests.post(post_endpoint, json=payload, headers=headers, timeout=10)
+        if res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Grafana API update failed: {res.text}"
+            })
+
+        return json.dumps({
+            "status": "success",
+            "message": f"Chart '{title}' appended successfully to dashboard!"
+        })
+
+    except Exception as e:
+        log.exception(f"Error appending chart panel to dashboard {uid}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
+@mcp.tool()
+def delete_chart_from_dashboard(uid: str, chart_id: int) -> str:
+    """Delete an individual chart panel from an existing dashboard by the panel's unique ID.
+
+    Returns a JSON string containing the status and a success message."""
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+
+    # Step 1: Fetch existing dashboard
+    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
+    try:
+        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
+        if get_res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to retrieve dashboard to delete chart: {get_res.text}"
+            })
+        
+        dashboard_data = get_res.json()
+        dashboard_json = dashboard_data.get("dashboard")
+        panels = dashboard_json.get("panels", [])
+
+        # Step 2: Filter out targeted panel
+        filtered_panels = [p for p in panels if p.get("id") != chart_id]
+        if len(filtered_panels) == len(panels):
+            return json.dumps({
+                "status": "error",
+                "message": f"Chart panel with ID {chart_id} not found on this dashboard."
+            })
+
+        dashboard_json["panels"] = filtered_panels
+        dashboard_json["version"] = dashboard_json.get("version", 1) + 1
+
+        # Step 3: POST back to save
+        post_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
+        payload = {
+            "dashboard": dashboard_json,
+            "overwrite": True
+        }
+        
+        res = requests.post(post_endpoint, json=payload, headers=headers, timeout=10)
+        if res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Grafana API update failed during chart removal: {res.text}"
+            })
+
+        return json.dumps({
+            "status": "success",
+            "message": f"Chart panel with ID {chart_id} was deleted successfully from dashboard!"
+        })
+
+    except Exception as e:
+        log.exception(f"Error deleting chart panel from dashboard {uid}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
 if __name__ == "__main__":
     import os
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
