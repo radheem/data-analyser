@@ -333,5 +333,96 @@ def test_export_dashboard_json_success():
         assert written_json["id"] is None
         assert "version" not in written_json or written_json["version"] == 1
 
+def test_create_multi_chart_dashboard_with_units_and_stats():
+    """Verify that create_multi_chart_dashboard correctly handles 'stat' charts and unit fields."""
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 200
+    mock_post_response.json.return_value = {
+        "uid": "stat123xyz78",
+        "url": "/d/stat123xyz78/stat-test",
+        "status": "success"
+    }
+    
+    charts = [
+        {"title": "Total Spend", "sql": "SELECT 100000", "chart_type": "stat", "unit": "USD"},
+        {"title": "Ads Count Percentage", "sql": "SELECT 50", "chart_type": "barchart", "unit": "percent"}
+    ]
+    
+    with patch("requests.post", return_value=mock_post_response) as mock_post, \
+         patch("src.server.bq_client") as mock_bq:
+         
+        mock_bq.query.return_value = MagicMock()
+        
+        result = src.server.create_multi_chart_dashboard("Stat Test", charts)
+        data = json.loads(result)
+        
+        assert data["status"] == "success"
+        mock_post.assert_called_once()
+        post_payload = mock_post.call_args[1]["json"]
+        panels = post_payload["dashboard"]["panels"]
+        
+        assert len(panels) == 2
+        assert panels[0]["title"] == "Total Spend"
+        assert panels[0]["type"] == "stat"
+        assert panels[0]["fieldConfig"]["defaults"]["unit"] == "currencyUSD"
+        
+        assert panels[1]["title"] == "Ads Count Percentage"
+        assert panels[1]["type"] == "barchart"
+        assert panels[1]["fieldConfig"]["defaults"]["unit"] == "percent"
+
+def test_add_chart_to_dashboard_with_unit():
+    """Verify add_chart_to_dashboard correctly normalizes and applies unit metadata."""
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 200
+    mock_get_response.json.return_value = {
+        "dashboard": {
+            "uid": "abc123xyz789",
+            "title": "Existing Dash",
+            "panels": [
+                {
+                    "id": 1,
+                    "title": "Panel 1",
+                    "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+                }
+            ],
+            "tags": ["mcp-generated"]
+        }
+    }
+    
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 200
+    mock_post_response.json.return_value = {
+        "uid": "abc123xyz789",
+        "url": "/d/abc123xyz789/existing-dash",
+        "status": "success"
+    }
+    
+    with patch("requests.get", return_value=mock_get_response) as mock_get, \
+         patch("requests.post", return_value=mock_post_response) as mock_post, \
+         patch("src.server.bq_client") as mock_bq:
+         
+        mock_bq.query.return_value = MagicMock()
+        
+        result = src.server.add_chart_to_dashboard(
+            uid="abc123xyz789",
+            chart_type="stat",
+            sql="SELECT 1",
+            title="Avg Rating",
+            width="half",
+            unit="EUR"
+        )
+        data = json.loads(result)
+        
+        assert data["status"] == "success"
+        mock_get.assert_called_once()
+        mock_post.assert_called_once()
+        
+        post_payload = mock_post.call_args[1]["json"]
+        panels = post_payload["dashboard"]["panels"]
+        assert len(panels) == 2
+        assert panels[1]["type"] == "stat"
+        assert panels[1]["fieldConfig"]["defaults"]["unit"] == "currencyEUR"
+
+
 
 

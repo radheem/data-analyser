@@ -730,6 +730,8 @@ def _resolve_panel_generator_and_type(chart_type: str):
         return grafana_generators.generate_line_chart_panel, "timeseries"
     elif "pie" in chart_type_lower or "proportion" in chart_type_lower or "dist" in chart_type_lower:
         return grafana_generators.generate_pie_chart_panel, "piechart"
+    elif "stat" in chart_type_lower or "number" in chart_type_lower or "metric" in chart_type_lower:
+        return grafana_generators.generate_stat_panel, "stat"
     else:
         return grafana_generators.generate_table_panel, "table"
 
@@ -739,7 +741,7 @@ def create_multi_chart_dashboard(title: str, charts: list[dict]) -> str:
 
     Arguments:
     - title: Dashboard title.
-    - charts: List of dicts, each with keys: 'title', 'sql', 'chart_type', and optional 'width' ('half' or 'full').
+    - charts: List of dicts, each with keys: 'title', 'sql', 'chart_type', optional 'width' ('half' or 'full'), and optional 'unit' (e.g. 'USD', 'EUR', 'percent').
 
     Returns a JSON string with the UID and direct URL to the created dashboard."""
     # Step 1: Pre-flight checks on all charts
@@ -749,6 +751,7 @@ def create_multi_chart_dashboard(title: str, charts: list[dict]) -> str:
         c_sql = c.get("sql", "").strip()
         c_type = c.get("chart_type", "table")
         c_width = c.get("width", "half")
+        c_unit = c.get("unit")
 
         if not c_sql.upper().startswith("SELECT") and not c_sql.upper().startswith("WITH"):
             return json.dumps({
@@ -775,7 +778,8 @@ def create_multi_chart_dashboard(title: str, charts: list[dict]) -> str:
             "title": c_title,
             "sql": c_sql,
             "chart_type": c_type,
-            "width": c_width
+            "width": c_width,
+            "unit": c_unit
         })
 
     # Step 2: Build panels array using auto-grid calculation
@@ -786,7 +790,10 @@ def create_multi_chart_dashboard(title: str, charts: list[dict]) -> str:
         grid_pos = grafana_generators.calculate_next_grid_position(panels, pc["width"])
         
         try:
-            panel_json = panel_gen(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos)
+            if panel_gen == grafana_generators.generate_table_panel:
+                panel_json = panel_gen(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos)
+            else:
+                panel_json = panel_gen(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos, unit=pc.get("unit"))
         except Exception as e:
             log.exception(f"Failed to generate panel JSON for {resolved_type}. Falling back to table.")
             panel_json = grafana_generators.generate_table_panel(id_num=idx, title=pc["title"], sql=pc["sql"], grid_pos=grid_pos)
@@ -840,7 +847,7 @@ def create_multi_chart_dashboard(title: str, charts: list[dict]) -> str:
         })
 
 @mcp.tool()
-def add_chart_to_dashboard(uid: str, chart_type: str, sql: str, title: str, width: str = "half") -> str:
+def add_chart_to_dashboard(uid: str, chart_type: str, sql: str, title: str, width: str = "half", unit: str = None) -> str:
     """Add a new chart panel to an existing Grafana dashboard using the auto-grid layout engine.
 
     Returns a JSON string containing the status and a success message."""
@@ -895,7 +902,10 @@ def add_chart_to_dashboard(uid: str, chart_type: str, sql: str, title: str, widt
 
         panel_gen, resolved_type = _resolve_panel_generator_and_type(chart_type)
         try:
-            panel_json = panel_gen(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos)
+            if panel_gen == grafana_generators.generate_table_panel:
+                panel_json = panel_gen(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos)
+            else:
+                panel_json = panel_gen(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos, unit=unit)
         except Exception as e:
             log.exception(f"Failed to generate panel JSON. Falling back to table.")
             panel_json = grafana_generators.generate_table_panel(id_num=next_id, title=title, sql=clean_sql, grid_pos=grid_pos)
