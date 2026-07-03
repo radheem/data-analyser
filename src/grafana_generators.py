@@ -49,6 +49,8 @@ def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name:
             "groupWidth": 0.7,
             "showValue": "auto",
             "stacking": "none",
+            "xTickLabelRotation": -45,
+            "xTickLabelMaxLength": 25,
             "tooltip": { "mode": "single", "sort": "none" },
             "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] }
         }

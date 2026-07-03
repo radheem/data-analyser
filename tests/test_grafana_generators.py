@@ -24,6 +24,8 @@ def test_generate_bar_chart_panel():
     assert panel["title"] == "Test Bar Chart"
     assert panel["targets"][0]["rawSql"] == "SELECT * FROM test"
     assert panel["targets"][0]["format"] == "table"
+    assert panel["options"]["xTickLabelRotation"] == -45
+    assert panel["options"]["xTickLabelMaxLength"] == 25
 
 def test_generate_line_chart_panel():
     panel = generate_line_chart_panel(2, "Test Line Chart", "SELECT * FROM test")
