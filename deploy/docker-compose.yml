@@ -14,3 +14,19 @@ services:
       - "5001:5000"
     stdin_open: true
     tty: true
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ../gcp-creds.json:/etc/grafana/google-key.json:ro
+    env_file:
+      - ../.env
+    environment:
+      - GF_INSTALL_PLUGINS=grafana-bigquery-datasource
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true
