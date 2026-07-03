@@ -9,5 +9,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Grafana Stat Panels & International Currency Formatting**
+- [x] **Track: Grafana Stat Panels & International Currency Formatting**
 *Link: [./tracks/grafana_stat_units_20260703/](./tracks/grafana_stat_units_20260703/)*
