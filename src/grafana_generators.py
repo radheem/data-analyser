@@ -76,6 +76,18 @@ def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name
             "x": 0,
             "y": 0
         },
+        "transformations": [
+            {
+                "id": "convertFieldType",
+                "options": {
+                    "fields": {
+                        "time": {
+                            "destinationType": "time"
+                        }
+                    }
+                }
+            }
+        ],
         "fieldConfig": {
             "defaults": {
                 "custom": {

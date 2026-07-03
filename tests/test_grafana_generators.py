@@ -34,6 +34,8 @@ def test_generate_line_chart_panel():
     assert panel["title"] == "Test Line Chart"
     assert panel["targets"][0]["rawSql"] == "SELECT * FROM test"
     assert panel["targets"][0]["format"] == "table"
+    assert panel["transformations"][0]["id"] == "convertFieldType"
+    assert panel["transformations"][0]["options"]["fields"]["time"]["destinationType"] == "time"
 
 def test_generate_pie_chart_panel():
     panel = generate_pie_chart_panel(3, "Test Pie Chart", "SELECT * FROM test")
