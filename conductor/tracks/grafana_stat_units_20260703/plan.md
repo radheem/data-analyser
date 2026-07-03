@@ -15,8 +15,8 @@
     - [x] Implement `generate_stat_panel` in `src/grafana_generators.py`.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Core Panel Generators Update' (Protocol in workflow.md)
 
-## Phase 3: MCP Tool Integration [checkpoint: cb61d31]
-- [x] Task: Update Tool Signatures and Parsers (cb61d31)
+## Phase 3: MCP Tool Integration [checkpoint: 6fb5d44]
+- [x] Task: Update Tool Signatures and Parsers (6fb5d44)
     - [x] Write failing integration tests in `tests/test_advanced_dashboard_crud.py` verifying `unit` parsing in `create_multi_chart_dashboard` and chart type resolution for `stat` panels.
     - [x] Update `_resolve_panel_generator_and_type` in `src/server.py` to route `"stat"` charts to `generate_stat_panel`.
     - [x] Update `create_multi_chart_dashboard` and `add_chart_to_dashboard` tools to extract the `unit` string from the user payload and pass it downstream.
