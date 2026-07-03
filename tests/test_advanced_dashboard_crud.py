@@ -423,6 +423,41 @@ def test_add_chart_to_dashboard_with_unit():
         assert panels[1]["type"] == "stat"
         assert panels[1]["fieldConfig"]["defaults"]["unit"] == "currencyEUR"
 
+def test_create_grafana_dashboard_with_stat_and_unit():
+    """Verify that the updated create_grafana_dashboard tool correctly creates a single-panel stat dashboard with units."""
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 200
+    mock_post_response.json.return_value = {
+        "uid": "single123xyz",
+        "url": "/d/single123xyz/single-test",
+        "status": "success"
+    }
+    
+    with patch("requests.post", return_value=mock_post_response) as mock_post, \
+         patch("src.server.bq_client") as mock_bq:
+         
+        mock_bq.query.return_value = MagicMock()
+        
+        result = src.server.create_grafana_dashboard(
+            sql="SELECT sum(spend_range_max_usd) FROM stats",
+            chart_type="stat",
+            title="Max Spend Overall",
+            unit="CAD"
+        )
+        data = json.loads(result)
+        
+        assert data["status"] == "success"
+        assert data["uid"] == "be245e302ec5"  # Deterministic hash of "Max Spend Overall"
+        
+        mock_post.assert_called_once()
+        post_payload = mock_post.call_args[1]["json"]
+        panels = post_payload["dashboard"]["panels"]
+        
+        assert len(panels) == 1
+        assert panels[0]["type"] == "stat"
+        assert panels[0]["fieldConfig"]["defaults"]["unit"] == "currencyCAD"
+
+
 
 
 

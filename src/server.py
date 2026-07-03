@@ -395,13 +395,14 @@ def search_advertiser_ads(
         })
 
 @mcp.tool()
-def create_grafana_dashboard(sql: str, chart_type: str, title: str) -> str:
+def create_grafana_dashboard(sql: str, chart_type: str, title: str, unit: str = None) -> str:
     """Create a resilient Grafana dashboard containing a single panel of the specified chart type.
     
     Supported chart types:
     - 'barchart': For comparing categorical data (e.g. spending by advertiser)
     - 'timeseries': For time-based trends (e.g. daily spending)
     - 'piechart': For proportional or distribution data
+    - 'stat': For single numeric metrics with auto sparkline trends (e.g. total ads count)
     - 'table': For raw data lists
     
     Returns a JSON string containing the status, dashboard UID, and a direct URL to the created dashboard."""
@@ -429,29 +430,18 @@ def create_grafana_dashboard(sql: str, chart_type: str, title: str) -> str:
                 "message": f"Pre-flight SQL Check Error: {str(bq_err)}"
             })
         
-    # Standardize/validate chart_type
-    chart_type_lower = chart_type.lower().replace(" ", "").replace("_", "")
-    
-    # Map chart_type_lower to the correct generator
-    if "bar" in chart_type_lower:
-        panel_gen = grafana_generators.generate_bar_chart_panel
-        resolved_type = "barchart"
-    elif "line" in chart_type_lower or "time" in chart_type_lower or "trend" in chart_type_lower:
-        panel_gen = grafana_generators.generate_line_chart_panel
-        resolved_type = "timeseries"
-    elif "pie" in chart_type_lower or "proportion" in chart_type_lower or "dist" in chart_type_lower:
-        panel_gen = grafana_generators.generate_pie_chart_panel
-        resolved_type = "piechart"
-    else:
-        panel_gen = grafana_generators.generate_table_panel
-        resolved_type = "table"
+    # Resolve the panel generator and type
+    panel_gen, resolved_type = _resolve_panel_generator_and_type(chart_type)
 
     # Generate a deterministic UID from the title using sha256 to ensure consistent updating
     uid = hashlib.sha256(title.encode('utf-8')).hexdigest()[:12]
     
     # Create the panel JSON
     try:
-        panel_json = panel_gen(id_num=1, title=title, sql=clean_sql)
+        if panel_gen == grafana_generators.generate_table_panel:
+            panel_json = panel_gen(id_num=1, title=title, sql=clean_sql)
+        else:
+            panel_json = panel_gen(id_num=1, title=title, sql=clean_sql, unit=unit)
     except Exception as e:
         log.exception(f"Failed to generate panel JSON for {resolved_type}. Falling back to table.")
         panel_json = grafana_generators.generate_table_panel(id_num=1, title=title, sql=clean_sql)
