@@ -2,9 +2,12 @@ import os
 import re
 import json
 import logging
+import hashlib
+import requests
 from mcp.server.fastmcp import FastMCP
 from google.cloud import bigquery
 from google.auth.exceptions import DefaultCredentialsError
+from src import grafana_generators
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("political-ads-mcp")
@@ -341,6 +344,115 @@ def search_advertiser_ads(
         })
     except Exception as e:
         log.exception(f"Error searching advertiser ads: {sql}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
+@mcp.tool()
+def create_grafana_dashboard(sql: str, chart_type: str, title: str) -> str:
+    """Create a resilient Grafana dashboard containing a single panel of the specified chart type.
+    
+    Supported chart types:
+    - 'barchart': For comparing categorical data (e.g. spending by advertiser)
+    - 'timeseries': For time-based trends (e.g. daily spending)
+    - 'piechart': For proportional or distribution data
+    - 'table': For raw data lists
+    
+    Returns a JSON string containing the status, dashboard UID, and a direct URL to the created dashboard."""
+    # Ensure SQL is SELECT/WITH
+    clean_sql = sql.strip()
+    if not clean_sql.upper().startswith("SELECT") and not clean_sql.upper().startswith("WITH"):
+        return json.dumps({
+            "status": "error",
+            "message": "Security Error: Only read-only SELECT or WITH statements are allowed."
+        })
+        
+    # Pre-flight query execution check (using BigQuery dry_run to validate syntax/columns for $0 cost)
+    if bq_client is not None:
+        try:
+            job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+            bq_client.query(clean_sql, job_config=job_config)
+        except Exception as bq_err:
+            log.exception(f"Pre-flight dry-run failed for query: {clean_sql}")
+            return json.dumps({
+                "status": "error",
+                "message": f"Pre-flight SQL Check Error: {str(bq_err)}"
+            })
+        
+    # Standardize/validate chart_type
+    chart_type_lower = chart_type.lower().replace(" ", "").replace("_", "")
+    
+    # Map chart_type_lower to the correct generator
+    if "bar" in chart_type_lower:
+        panel_gen = grafana_generators.generate_bar_chart_panel
+        resolved_type = "barchart"
+    elif "line" in chart_type_lower or "time" in chart_type_lower or "trend" in chart_type_lower:
+        panel_gen = grafana_generators.generate_line_chart_panel
+        resolved_type = "timeseries"
+    elif "pie" in chart_type_lower or "proportion" in chart_type_lower or "dist" in chart_type_lower:
+        panel_gen = grafana_generators.generate_pie_chart_panel
+        resolved_type = "piechart"
+    else:
+        panel_gen = grafana_generators.generate_table_panel
+        resolved_type = "table"
+
+    # Generate a deterministic UID from the title using sha256 to ensure consistent updating
+    uid = hashlib.sha256(title.encode('utf-8')).hexdigest()[:12]
+    
+    # Create the panel JSON
+    try:
+        panel_json = panel_gen(id_num=1, title=title, sql=clean_sql)
+    except Exception as e:
+        log.exception(f"Failed to generate panel JSON for {resolved_type}. Falling back to table.")
+        panel_json = grafana_generators.generate_table_panel(id_num=1, title=title, sql=clean_sql)
+        resolved_type = "table"
+        
+    # Generate the base dashboard JSON wrapping the panel
+    dashboard_json = grafana_generators.generate_base_dashboard(uid=uid, title=title, panels=[panel_json])
+    
+    # Load Grafana configuration from environment variables
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_external_url = os.environ.get("GRAFANA_EXTERNAL_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+        
+    payload = {
+        "dashboard": dashboard_json,
+        "overwrite": True
+    }
+    
+    api_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
+    
+    try:
+        # Post to Grafana API
+        res = requests.post(api_endpoint, json=payload, headers=headers, timeout=10)
+        
+        if res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Grafana API returned status {res.status_code}: {res.text}"
+            })
+            
+        data = res.json()
+        dashboard_url = f"{grafana_external_url.rstrip('/')}{data.get('url')}"
+        
+        return json.dumps({
+            "status": "success",
+            "uid": uid,
+            "resolved_chart_type": resolved_type,
+            "dashboard_url": dashboard_url,
+            "message": f"Resilient dashboard '{title}' created successfully!"
+        })
+        
+    except Exception as e:
+        log.exception("Error creating Grafana dashboard")
         return json.dumps({
             "status": "error",
             "message": str(e)

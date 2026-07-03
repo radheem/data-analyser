@@ -278,3 +278,127 @@ def test_parse_impressions_range():
     # Single numbers / fallbacks
     assert _parse_impressions_range("10000") == {"min": 10000, "max": 10000}
     assert _parse_impressions_range("no digits here") == {"min": None, "max": None}
+
+@patch("requests.post")
+def test_create_grafana_dashboard_success(mock_post):
+    """Test create_grafana_dashboard tool on successful POST to Grafana API."""
+    import src.server
+    
+    # Mock requests.post response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": "success",
+        "url": "/d/test-uid/test-slug",
+        "uid": "test-uid"
+    }
+    mock_post.return_value = mock_response
+    
+    # Mock BigQuery client to bypass pre-flight
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.__iter__.return_value = [{"col": 1}]
+    mock_client.query.return_value = mock_query_job
+    
+    original_client = src.server.bq_client
+    src.server.bq_client = mock_client
+    
+    try:
+        # Call the tool (SQL, chart_type, title)
+        result = src.server.create_grafana_dashboard(
+            sql="SELECT * FROM `creative_stats` LIMIT 10",
+            chart_type="barchart",
+            title="My Test Dashboard"
+        )
+        
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert "http://localhost:3000/d/test-uid/test-slug" in data["dashboard_url"]
+        
+        # Verify post is called with expected payload
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert "/api/dashboards/db" in args[0]
+        assert "dashboard" in kwargs["json"]
+        assert kwargs["json"]["dashboard"]["title"] == "My Test Dashboard"
+        assert kwargs["json"]["dashboard"]["panels"][0]["type"] == "barchart"
+        
+    finally:
+        src.server.bq_client = original_client
+
+@patch("requests.post")
+def test_create_grafana_dashboard_preflight_failure(mock_post):
+    """Test create_grafana_dashboard tool aborts and returns error if pre-flight query fails."""
+    import src.server
+    
+    # Mock BigQuery client to raise exception on query execution
+    mock_client = MagicMock()
+    mock_client.query.side_effect = Exception("BigQuery SQL syntax error.")
+    
+    original_client = src.server.bq_client
+    src.server.bq_client = mock_client
+    
+    try:
+        result = src.server.create_grafana_dashboard(
+            sql="SELECT INVALID_COLUMN FROM `creative_stats`",
+            chart_type="barchart",
+            title="My Bad Dashboard"
+        )
+        
+        data = json.loads(result)
+        assert data["status"] == "error"
+        assert "BigQuery SQL syntax error" in data["message"]
+        
+        # Verify requests.post was NEVER called (aborted early!)
+        mock_post.assert_not_called()
+        
+    finally:
+        src.server.bq_client = original_client
+
+@patch("requests.post")
+@patch("src.grafana_generators.generate_bar_chart_panel")
+def test_create_grafana_dashboard_fallback_to_table(mock_gen_bar, mock_post):
+    """Test create_grafana_dashboard tool falls back to a table panel if chart generation fails."""
+    import src.server
+    
+    # Mock the bar chart panel generator to raise an error
+    mock_gen_bar.side_effect = Exception("Mocked generation failure.")
+    
+    # Mock requests.post response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": "success",
+        "url": "/d/test-uid/test-slug",
+        "uid": "test-uid"
+    }
+    mock_post.return_value = mock_response
+    
+    # Mock BigQuery client to bypass pre-flight
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.__iter__.return_value = [{"col": 1}]
+    mock_client.query.return_value = mock_query_job
+    
+    original_client = src.server.bq_client
+    src.server.bq_client = mock_client
+    
+    try:
+        result = src.server.create_grafana_dashboard(
+            sql="SELECT * FROM `creative_stats` LIMIT 10",
+            chart_type="barchart",
+            title="My Fallback Dashboard"
+        )
+        
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["resolved_chart_type"] == "table"
+        
+        # Verify post is called with table type
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert kwargs["json"]["dashboard"]["panels"][0]["type"] == "table"
+        
+    finally:
+        src.server.bq_client = original_client
+
