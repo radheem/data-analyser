@@ -10,3 +10,4 @@
 
 ## Dashboard & Visualization
 - **Looker Studio (formerly Data Studio):** Used to build the visual dashboard, connecting natively to BigQuery to visualize the political ad metrics.
+- **Grafana & Docker Compose:** Used for dynamic, agent-driven local dashboards, auto-provisioned with BigQuery.
