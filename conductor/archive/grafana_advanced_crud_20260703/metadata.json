@@ -1,0 +1,8 @@
+{
+  "track_id": "grafana_advanced_crud_20260703",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-07-03T12:00:00Z",
+  "updated_at": "2026-07-03T12:00:00Z",
+  "description": "Extend Grafana Dashboard integration with full CRUD capabilities, multiple-chart dashboards, dynamic auto-grid width layouts (half vs full), metadata updates, and JSON exports"
+}
