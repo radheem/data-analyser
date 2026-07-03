@@ -1,6 +1,6 @@
 import pytest
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 import src.server
 
 def test_list_grafana_dashboards_success():
@@ -294,5 +294,44 @@ def test_delete_chart_from_dashboard_success():
         panels = post_payload["dashboard"]["panels"]
         assert len(panels) == 1
         assert panels[0]["id"] == 1
+
+def test_export_dashboard_json_success():
+    """Test export_dashboard_json fetches the dashboard, strips internal IDs, and writes it to disk."""
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 200
+    mock_get_response.json.return_value = {
+        "dashboard": {
+            "id": 42,
+            "uid": "export123xyz",
+            "title": "Export Dashboard",
+            "version": 15,
+            "panels": [
+                {"id": 1, "title": "Chart 1"}
+            ],
+            "tags": ["mcp-generated"]
+        }
+    }
+    
+    with patch("requests.get", return_value=mock_get_response) as mock_get, \
+         patch("builtins.open", mock_open()) as mock_file, \
+         patch("os.makedirs") as mock_makedirs:
+         
+        result = src.server.export_dashboard_json("export123xyz")
+        data = json.loads(result)
+        
+        assert data["status"] == "success"
+        assert "export123xyz.json" in data["file_path"]
+        
+        mock_get.assert_called_once()
+        mock_makedirs.assert_called_once()
+        mock_file.assert_called_once()
+        
+        # Verify JSON written had top-level 'id' and 'version' stripped/normalized
+        written_content = "".join([call.args[0] for call in mock_file().write.call_args_list])
+        written_json = json.loads(written_content)
+        
+        assert written_json["id"] is None
+        assert "version" not in written_json or written_json["version"] == 1
+
 
 

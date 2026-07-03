@@ -996,6 +996,67 @@ def delete_chart_from_dashboard(uid: str, chart_id: int) -> str:
             "message": str(e)
         })
 
+@mcp.tool()
+def export_dashboard_json(uid: str) -> str:
+    """Fetch an existing dashboard by its UID, strip internal Grafana identifiers (database ID, version),
+    and save the clean, importable JSON to disk under the local mounted volume.
+
+    Returns a JSON string containing the status, path of the saved file, and a success message."""
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+
+    # Step 1: Fetch dashboard model
+    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
+    try:
+        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
+        if get_res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to retrieve dashboard for exporting: {get_res.text}"
+            })
+        
+        dashboard_data = get_res.json()
+        dashboard_json = dashboard_data.get("dashboard")
+        if not dashboard_json:
+            return json.dumps({
+                "status": "error",
+                "message": "Retrieval error: No dashboard model found in response."
+            })
+
+        # Step 2: Strip internal identifiers for a clean, importable portable template
+        dashboard_json["id"] = None
+        if "version" in dashboard_json:
+            dashboard_json["version"] = 1
+
+        # Step 3: Ensure export directory exists
+        export_dir = "deploy/grafana/dashboards/exported_dashboards"
+        os.makedirs(export_dir, exist_ok=True)
+
+        # Step 4: Write cleaned JSON to file
+        file_path = os.path.join(export_dir, f"{uid}.json")
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(dashboard_json, f, indent=2, ensure_ascii=False)
+
+        return json.dumps({
+            "status": "success",
+            "file_path": file_path,
+            "message": f"Clean dashboard JSON template exported successfully to '{file_path}'!"
+        })
+
+    except Exception as e:
+        log.exception(f"Error exporting dashboard with UID {uid}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
 if __name__ == "__main__":
     import os
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
