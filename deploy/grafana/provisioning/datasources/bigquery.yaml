@@ -10,5 +10,5 @@ datasources:
       clientEmail: adtech-prj@bq-learn-500822.iam.gserviceaccount.com
       defaultProject: bq-learn-500822
       tokenUri: https://oauth2.googleapis.com/token
-      privateKeyPath: /etc/grafana/google-key.json
+      privateKeyPath: /etc/grafana/google-key.pem
     editable: true
