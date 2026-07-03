@@ -22,7 +22,7 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards
-      - ../gcp-creds.json:/etc/grafana/google-key.json:ro
+      - ./grafana/google-key.pem:/etc/grafana/google-key.pem:ro
     env_file:
       - ../.env
     environment:

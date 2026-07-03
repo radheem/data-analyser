@@ -16,6 +16,7 @@ def setup_grafana_datasource():
     """Dynamically configure the Grafana BigQuery datasource by parsing gcp-creds.json."""
     creds_path = "gcp-creds.json"
     yaml_path = "deploy/grafana/provisioning/datasources/bigquery.yaml"
+    pem_path = "deploy/grafana/google-key.pem"
     
     if os.path.exists(creds_path) and os.path.exists(os.path.dirname(yaml_path)):
         try:
@@ -24,7 +25,14 @@ def setup_grafana_datasource():
                 
             client_email = creds.get("client_email")
             project_id = creds.get("project_id")
+            private_key = creds.get("private_key")
             
+            # Write the private key string to a raw PEM file for Grafana to read
+            if private_key:
+                with open(pem_path, "w") as fp:
+                    fp.write(private_key)
+                log.info("Successfully extracted PEM private key to local file.")
+                
             if client_email and project_id:
                 yaml_content = f"""apiVersion: 1
 
@@ -38,7 +46,7 @@ datasources:
       clientEmail: {client_email}
       defaultProject: {project_id}
       tokenUri: https://oauth2.googleapis.com/token
-      privateKeyPath: /etc/grafana/google-key.json
+      privateKeyPath: /etc/grafana/google-key.pem
     editable: true
 """
                 with open(yaml_path, "w") as fy:
