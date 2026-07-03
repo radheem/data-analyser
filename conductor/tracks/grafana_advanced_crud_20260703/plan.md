@@ -18,15 +18,15 @@
     - [x] Implement the `calculate_next_grid_position` algorithm to handle side-by-side half-width pairing and full-width row stacking.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Dynamic Auto-Grid Layout System' (Protocol in workflow.md)
 
-## Phase 3: Multi-Chart CRUD Operations
-- [ ] Task: Implement Multi-Chart Creation
-    - [ ] Write failing test for `create_multi_chart_dashboard`, ensuring it aborts atomically on pre-flight failure.
-    - [ ] Implement `create_multi_chart_dashboard` utilizing the grid calculator and batch SQL validation.
-- [ ] Task: Implement Appending & Deleting Individual Charts
-    - [ ] Write failing tests for `add_chart_to_dashboard` and `delete_chart_from_dashboard`.
-    - [ ] Implement `add_chart_to_dashboard` to calculate the next position and append the panel array.
-    - [ ] Implement `delete_chart_from_dashboard` to filter the panels array by ID and save.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Multi-Chart CRUD Operations' (Protocol in workflow.md)
+## Phase 3: Multi-Chart CRUD Operations [checkpoint: c5e39a7]
+- [x] Task: Implement Multi-Chart Creation (c5e39a7)
+    - [x] Write failing test for `create_multi_chart_dashboard`, ensuring it aborts atomically on pre-flight failure.
+    - [x] Implement `create_multi_chart_dashboard` utilizing the grid calculator and batch SQL validation.
+- [x] Task: Implement Appending & Deleting Individual Charts (c5e39a7)
+    - [x] Write failing tests for `add_chart_to_dashboard` and `delete_chart_from_dashboard`.
+    - [x] Implement `add_chart_to_dashboard` to calculate the next position and append the panel array.
+    - [x] Implement `delete_chart_from_dashboard` to filter the panels array by ID and save.
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Multi-Chart CRUD Operations' (Protocol in workflow.md)
 
 ## Phase 4: Local Dashboard JSON Exports
 - [ ] Task: Implement JSON Exporter Tool
