@@ -6,8 +6,9 @@
 
 ## Backend & MCP Server
 - **mcp (FastMCP):** The official Python SDK for the Model Context Protocol, providing the `FastMCP` framework to easily expose functions as tools to LLMs.
+- **Official Grafana MCP (grafana/mcp-grafana):** Official Docker-containerized MCP server used to query and build dashboards dynamically across Grafana.
 - **google-cloud-bigquery:** The official Google Cloud client library used to securely query the public datasets and optionally write aggregated data to your personal project.
 
 ## Dashboard & Visualization
 - **Looker Studio (formerly Data Studio):** Used to build the visual dashboard, connecting natively to BigQuery to visualize the political ad metrics.
-- **Grafana & Docker Compose:** Used for dynamic, agent-driven local dashboards, auto-provisioned with BigQuery, supporting advanced CRUD APIs and disk-mounted dashboard JSON exports.
+- **Grafana & Docker Compose:** Used for dynamic, agent-driven local dashboards, auto-provisioned with BigQuery, utilizing the official Grafana MCP server for advanced dashboarding/querying.

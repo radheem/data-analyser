@@ -16,5 +16,5 @@ This project creates a unified intelligence and visualization pipeline for Googl
 
 ## Core Features
 1. **Political Ads MCP Server:** A Python-based `FastMCP` application with tools to fetch data from the `creative_stats` table.
-2. **Dynamic Grafana Visualization:** A resilient, agent-triggered dashboard creation system supporting full dashboard and individual chart CRUD operations, auto-grid layout formatting (half vs full-width stacking), metadata updates, portable JSON template exports, single-metric Stat panels with sparklines, and intelligent international currency and value unit formatting.
+2. **Official Grafana MCP Integration:** Orchestrates the official `grafana/mcp-grafana` Model Context Protocol server alongside Grafana to dynamically query and build dashboards across all configured datasources (including BigQuery) directly via standard MCP capabilities.
 3. **Dashboard Data Pipeline:** (Optional) Scheduled Python/SQL scripts to materialize aggregated summary tables to optimize Looker Studio performance.
