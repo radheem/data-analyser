@@ -28,9 +28,9 @@
     - [x] Implement `delete_chart_from_dashboard` to filter the panels array by ID and save.
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Multi-Chart CRUD Operations' (Protocol in workflow.md)
 
-## Phase 4: Local Dashboard JSON Exports
-- [ ] Task: Implement JSON Exporter Tool
-    - [ ] Write failing test for `export_dashboard_json` verifying internal IDs are stripped and file is written.
-    - [ ] Ensure the local export directory `deploy/grafana/dashboards/exported_dashboards` exists.
-    - [ ] Implement `export_dashboard_json` to fetch, clean, and write the JSON file to disk.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Local Dashboard JSON Exports' (Protocol in workflow.md)
+## Phase 4: Local Dashboard JSON Exports [checkpoint: 1e75976]
+- [x] Task: Implement JSON Exporter Tool (1e75976)
+    - [x] Write failing test for `export_dashboard_json` verifying internal IDs are stripped and file is written.
+    - [x] Ensure the local export directory `deploy/grafana/dashboards/exported_dashboards` exists.
+    - [x] Implement `export_dashboard_json` to fetch, clean, and write the JSON file to disk.
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Local Dashboard JSON Exports' (Protocol in workflow.md)
