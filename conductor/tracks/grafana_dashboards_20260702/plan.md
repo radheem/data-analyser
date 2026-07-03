@@ -1,18 +1,18 @@
 # Implementation Plan
 
-## Phase 1: Infrastructure & Grafana Provisioning
-- [ ] Task: Set up Grafana Provisioning Directories
-    - [ ] Create `deploy/grafana/provisioning/datasources` directory.
-    - [ ] Create `deploy/grafana/provisioning/dashboards` directory.
-- [ ] Task: Configure BigQuery Datasource
-    - [ ] Create `deploy/grafana/provisioning/datasources/bigquery.yaml` configured for the BigQuery plugin.
-- [ ] Task: Configure Dashboard Provisioning
-    - [ ] Create `deploy/grafana/provisioning/dashboards/provider.yaml` to point to local dashboard mounts.
-- [ ] Task: Update Docker Compose
-    - [ ] Update `deploy/docker-compose.yml` to include a `grafana` service.
-    - [ ] Map the provisioning directories as volumes in the Grafana container.
-    - [ ] Set environment variables to install the `doitintl-bigquery-datasource` plugin automatically.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Infrastructure & Grafana Provisioning' (Protocol in workflow.md)
+## Phase 1: Infrastructure & Grafana Provisioning [checkpoint: 17609ad]
+- [x] Task: Set up Grafana Provisioning Directories
+    - [x] Create `deploy/grafana/provisioning/datasources` directory.
+    - [x] Create `deploy/grafana/provisioning/dashboards` directory.
+- [x] Task: Configure BigQuery Datasource
+    - [x] Create `deploy/grafana/provisioning/datasources/bigquery.yaml` configured for the BigQuery plugin.
+- [x] Task: Configure Dashboard Provisioning
+    - [x] Create `deploy/grafana/provisioning/dashboards/provider.yaml` to point to local dashboard mounts.
+- [x] Task: Update Docker Compose
+    - [x] Update `deploy/docker-compose.yml` to include a `grafana` service.
+    - [x] Map the provisioning directories as volumes in the Grafana container.
+    - [x] Set environment variables to install the `doitintl-bigquery-datasource` plugin automatically.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Infrastructure & Grafana Provisioning' (Protocol in workflow.md)
 
 ## Phase 2: Grafana Dashboard JSON Generators
 - [ ] Task: Setup JSON Generator Module
