@@ -1,10 +1,10 @@
 # Implementation Plan
 
-## Phase 1: Intelligent Unit Normalization
-- [ ] Task: Implement Unit Normalization Helper
-    - [ ] Write failing unit tests in `tests/test_grafana_generators.py` for `normalize_grafana_unit` covering currencies (USD, eur, GBP), standard strings (percent), and empty fallbacks.
-    - [ ] Implement `normalize_grafana_unit` in `src/grafana_generators.py` to handle 3-letter currency formatting and passthroughs.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Intelligent Unit Normalization' (Protocol in workflow.md)
+## Phase 1: Intelligent Unit Normalization [checkpoint: 986ccf7]
+- [x] Task: Implement Unit Normalization Helper (986ccf7)
+    - [x] Write failing unit tests in `tests/test_grafana_generators.py` for `normalize_grafana_unit` covering currencies (USD, eur, GBP), standard strings (percent), and empty fallbacks.
+    - [x] Implement `normalize_grafana_unit` in `src/grafana_generators.py` to handle 3-letter currency formatting and passthroughs.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Intelligent Unit Normalization' (Protocol in workflow.md)
 
 ## Phase 2: Core Panel Generators Update
 - [ ] Task: Inject Units into Existing Panels
