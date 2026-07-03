@@ -24,14 +24,14 @@
     - [x] Implement generator logic for Bar Chart, Line Chart, Pie Chart, and Table to pass tests.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Grafana Dashboard JSON Generators' (Protocol in workflow.md)
 
-## Phase 3: Resilient MCP Tool Integration
-- [ ] Task: Implement `create_grafana_dashboard` Tool - Core Logic
-    - [ ] Write failing test in `tests/test_server.py` for the new `create_grafana_dashboard` tool.
-    - [ ] Implement basic tool logic in `src/server.py` to push generated dashboards to Grafana's HTTP API.
-- [ ] Task: Implement Pre-flight SQL Check
-    - [ ] Write failing test for pre-flight SQL check (aborting on invalid query/no data).
-    - [ ] Update tool logic to execute the query via BigQuery client before generating the dashboard.
-- [ ] Task: Implement Fallback and Validation
-    - [ ] Write failing test for falling back to a Table view when chart generation or validation fails.
-    - [ ] Update tool logic to catch generation errors, validate the JSON structure, and trigger the Table fallback.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Resilient MCP Tool Integration' (Protocol in workflow.md)
+## Phase 3: Resilient MCP Tool Integration [checkpoint: d7d287e]
+- [x] Task: Implement `create_grafana_dashboard` Tool - Core Logic
+    - [x] Write failing test in `tests/test_server.py` for the new `create_grafana_dashboard` tool.
+    - [x] Implement basic tool logic in `src/server.py` to push generated dashboards to Grafana's HTTP API.
+- [x] Task: Implement Pre-flight SQL Check
+    - [x] Write failing test for pre-flight SQL check (aborting on invalid query/no data).
+    - [x] Update tool logic to execute the query via BigQuery client before generating the dashboard.
+- [x] Task: Implement Fallback and Validation
+    - [x] Write failing test for falling back to a Table view when chart generation or validation fails.
+    - [x] Update tool logic to catch generation errors, validate the JSON structure, and trigger the Table fallback.
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Resilient MCP Tool Integration' (Protocol in workflow.md)
