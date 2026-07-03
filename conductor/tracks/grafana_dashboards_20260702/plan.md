@@ -14,15 +14,15 @@
     - [x] Set environment variables to install the `doitintl-bigquery-datasource` plugin automatically.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Infrastructure & Grafana Provisioning' (Protocol in workflow.md)
 
-## Phase 2: Grafana Dashboard JSON Generators
-- [ ] Task: Setup JSON Generator Module
-    - [ ] Create a new module `src/grafana_generators.py` to isolate JSON creation logic.
-    - [ ] Write failing test for base dashboard JSON structure generation in a new test file `tests/test_grafana_generators.py`.
-    - [ ] Implement base dashboard JSON structure generation to pass test.
-- [ ] Task: Implement Chart Type Generators
-    - [ ] Write failing tests for Bar Chart, Line Chart, Pie Chart, and Table panel JSON generation.
-    - [ ] Implement generator logic for Bar Chart, Line Chart, Pie Chart, and Table to pass tests.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Grafana Dashboard JSON Generators' (Protocol in workflow.md)
+## Phase 2: Grafana Dashboard JSON Generators [checkpoint: 653e3f0]
+- [x] Task: Setup JSON Generator Module
+    - [x] Create a new module `src/grafana_generators.py` to isolate JSON creation logic.
+    - [x] Write failing test for base dashboard JSON structure generation in a new test file `tests/test_grafana_generators.py`.
+    - [x] Implement base dashboard JSON structure generation to pass test.
+- [x] Task: Implement Chart Type Generators
+    - [x] Write failing tests for Bar Chart, Line Chart, Pie Chart, and Table panel JSON generation.
+    - [x] Implement generator logic for Bar Chart, Line Chart, Pie Chart, and Table to pass tests.
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Grafana Dashboard JSON Generators' (Protocol in workflow.md)
 
 ## Phase 3: Resilient MCP Tool Integration
 - [ ] Task: Implement `create_grafana_dashboard` Tool - Core Logic
