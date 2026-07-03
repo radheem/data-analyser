@@ -65,7 +65,7 @@ def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name
         "datasource": _get_datasource_ref(datasource_name),
         "targets": [
             {
-                "format": "time_series",
+                "format": "table",
                 "rawSql": sql,
                 "refId": "A"
             }
