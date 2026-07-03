@@ -507,6 +507,220 @@ def create_grafana_dashboard(sql: str, chart_type: str, title: str) -> str:
             "message": str(e)
         })
 
+@mcp.tool()
+def list_grafana_dashboards() -> str:
+    """List all dashboards in Grafana that are tagged with 'mcp-generated'.
+
+    Returns a JSON string containing the status and a list of dashboard metadata (uid, title, and external URL)."""
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_external_url = os.environ.get("GRAFANA_EXTERNAL_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+
+    api_endpoint = f"{grafana_api_url.rstrip('/')}/api/search"
+    params = {"tag": "mcp-generated"}
+
+    try:
+        res = requests.get(api_endpoint, params=params, headers=headers, timeout=10)
+        if res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Grafana API returned status {res.status_code}: {res.text}"
+            })
+
+        dashboards_data = res.json()
+        dashboards = []
+        for d in dashboards_data:
+            url = f"{grafana_external_url.rstrip('/')}{d.get('url', '')}"
+            dashboards.append({
+                "uid": d.get("uid"),
+                "title": d.get("title"),
+                "url": url
+            })
+
+        return json.dumps({
+            "status": "success",
+            "dashboards": dashboards
+        })
+
+    except Exception as e:
+        log.exception("Error listing Grafana dashboards")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
+@mcp.tool()
+def get_grafana_dashboard(uid: str) -> str:
+    """Retrieve the full raw JSON model of an existing Grafana dashboard by its unique identifier (UID).
+
+    Returns a JSON string containing the status and the complete dashboard JSON structure."""
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+
+    api_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
+
+    try:
+        res = requests.get(api_endpoint, headers=headers, timeout=10)
+        if res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Grafana API returned status {res.status_code}: {res.text}"
+            })
+
+        data = res.json()
+        dashboard_json = data.get("dashboard")
+        return json.dumps({
+            "status": "success",
+            "dashboard": dashboard_json
+        })
+
+    except Exception as e:
+        log.exception(f"Error retrieving Grafana dashboard with UID {uid}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
+@mcp.tool()
+def update_dashboard(uid: str, title: str = None, refresh: str = None) -> str:
+    """Update high-level metadata (such as title or refresh interval) of an existing dashboard.
+
+    Returns a JSON string containing the status and a success message."""
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+
+    # Step 1: Fetch the existing dashboard model
+    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
+    try:
+        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
+        if get_res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to retrieve existing dashboard for update: {get_res.text}"
+            })
+        
+        dashboard_data = get_res.json()
+        dashboard_json = dashboard_data.get("dashboard")
+        
+        # Step 2: Modify metadata fields if provided
+        updated = False
+        if title is not None:
+            dashboard_json["title"] = title
+            updated = True
+        if refresh is not None:
+            dashboard_json["refresh"] = refresh
+            updated = True
+            
+        if not updated:
+            return json.dumps({
+                "status": "success",
+                "message": "No updates requested."
+            })
+            
+        # Step 3: Increment version and post back
+        dashboard_json["version"] = dashboard_json.get("version", 1) + 1
+        payload = {
+            "dashboard": dashboard_json,
+            "overwrite": True
+        }
+        
+        post_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/db"
+        res = requests.post(post_endpoint, json=payload, headers=headers, timeout=10)
+        if res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Grafana API update failed with status {res.status_code}: {res.text}"
+            })
+            
+        return json.dumps({
+            "status": "success",
+            "message": f"Dashboard '{dashboard_json.get('title')}' updated successfully!"
+        })
+
+    except Exception as e:
+        log.exception(f"Error updating Grafana dashboard with UID {uid}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
+@mcp.tool()
+def delete_grafana_dashboard(uid: str) -> str:
+    """Delete an existing dashboard by UID. For safety, only dashboards with the 'mcp-generated' tag can be deleted.
+
+    Returns a JSON string containing the status and a success message."""
+    grafana_api_url = os.environ.get("GRAFANA_API_URL", "http://localhost:3000")
+    grafana_token = os.environ.get("GRAFANA_API_TOKEN", None)
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    if grafana_token:
+        headers["Authorization"] = f"Bearer {grafana_token}"
+
+    # Step 1: Fetch dashboard model to check tags for safety
+    get_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
+    try:
+        get_res = requests.get(get_endpoint, headers=headers, timeout=10)
+        if get_res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to retrieve dashboard to verify tags: {get_res.text}"
+            })
+        
+        dashboard_data = get_res.json()
+        dashboard_json = dashboard_data.get("dashboard", {})
+        tags = dashboard_json.get("tags", [])
+        
+        if "mcp-generated" not in tags:
+            return json.dumps({
+                "status": "error",
+                "message": "Safety Protection Error: Only dashboards tagged with 'mcp-generated' can be deleted."
+            })
+
+        # Step 2: Proceed with DELETE
+        delete_endpoint = f"{grafana_api_url.rstrip('/')}/api/dashboards/uid/{uid}"
+        res = requests.delete(delete_endpoint, headers=headers, timeout=10)
+        if res.status_code != 200:
+            return json.dumps({
+                "status": "error",
+                "message": f"Grafana API deletion failed with status {res.status_code}: {res.text}"
+            })
+            
+        return json.dumps({
+            "status": "success",
+            "message": f"Dashboard with UID '{uid}' was deleted successfully!"
+        })
+
+    except Exception as e:
+        log.exception(f"Error deleting Grafana dashboard with UID {uid}")
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })
+
 if __name__ == "__main__":
     import os
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
