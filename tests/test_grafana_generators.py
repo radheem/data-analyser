@@ -52,3 +52,49 @@ def test_generate_table_panel():
     assert panel["title"] == "Test Table"
     assert panel["targets"][0]["rawSql"] == "SELECT * FROM test"
     assert panel["targets"][0]["format"] == "table"
+
+def test_calculate_next_grid_position_empty():
+    """Verify first panel placement for both half and full width."""
+    from src.grafana_generators import calculate_next_grid_position
+    
+    # Empty panels list, adding "half"
+    pos_half = calculate_next_grid_position([], "half")
+    assert pos_half == {"x": 0, "y": 0, "w": 12, "h": 8}
+    
+    # Empty panels list, adding "full"
+    pos_full = calculate_next_grid_position([], "full")
+    assert pos_full == {"x": 0, "y": 0, "w": 24, "h": 8}
+
+def test_calculate_next_grid_position_stacking():
+    """Verify correct alignment and stacking with existing panels."""
+    from src.grafana_generators import calculate_next_grid_position
+    
+    # 1. Existing half-width panel on the left (x:0, y:0, w:12, h:8)
+    panels = [
+        {"gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}}
+    ]
+    # Adding another "half" should pair side-by-side on same row (x:12, y:0)
+    pos = calculate_next_grid_position(panels, "half")
+    assert pos == {"x": 12, "y": 0, "w": 12, "h": 8}
+    
+    # Adding a "full" should stack on a new row (x:0, y:8)
+    pos = calculate_next_grid_position(panels, "full")
+    assert pos == {"x": 0, "y": 8, "w": 24, "h": 8}
+    
+    # 2. Existing half-width panel on the right (x:12, y:0, w:12, h:8)
+    panels = [
+        {"gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}},
+        {"gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}}
+    ]
+    # Adding "half" should start a new row (x:0, y:8)
+    pos = calculate_next_grid_position(panels, "half")
+    assert pos == {"x": 0, "y": 8, "w": 12, "h": 8}
+    
+    # 3. Existing full-width panel (x:0, y:0, w:24, h:8)
+    panels = [
+        {"gridPos": {"x": 0, "y": 0, "w": 24, "h": 8}}
+    ]
+    # Adding "half" should start a new row (x:0, y:8)
+    pos = calculate_next_grid_position(panels, "half")
+    assert pos == {"x": 0, "y": 8, "w": 12, "h": 8}
+

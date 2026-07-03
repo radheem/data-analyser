@@ -22,7 +22,7 @@ def _get_datasource_ref(datasource_name: str = "BigQuery") -> dict:
         "uid": datasource_name
     }
 
-def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery") -> dict:
+def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None) -> dict:
     """Generate a Grafana Bar Chart panel JSON."""
     return {
         "id": id_num,
@@ -36,7 +36,7 @@ def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name:
                 "refId": "A"
             }
         ],
-        "gridPos": {
+        "gridPos": grid_pos or {
             "h": 12,
             "w": 24,
             "x": 0,
@@ -56,7 +56,7 @@ def generate_bar_chart_panel(id_num: int, title: str, sql: str, datasource_name:
         }
     }
 
-def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery") -> dict:
+def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None) -> dict:
     """Generate a Grafana Line Chart (timeseries) panel JSON."""
     return {
         "id": id_num,
@@ -70,7 +70,7 @@ def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name
                 "refId": "A"
             }
         ],
-        "gridPos": {
+        "gridPos": grid_pos or {
             "h": 12,
             "w": 24,
             "x": 0,
@@ -108,7 +108,7 @@ def generate_line_chart_panel(id_num: int, title: str, sql: str, datasource_name
         }
     }
 
-def generate_pie_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery") -> dict:
+def generate_pie_chart_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None) -> dict:
     """Generate a Grafana Pie Chart panel JSON."""
     return {
         "id": id_num,
@@ -122,7 +122,7 @@ def generate_pie_chart_panel(id_num: int, title: str, sql: str, datasource_name:
                 "refId": "A"
             }
         ],
-        "gridPos": {
+        "gridPos": grid_pos or {
             "h": 12,
             "w": 24,
             "x": 0,
@@ -140,7 +140,7 @@ def generate_pie_chart_panel(id_num: int, title: str, sql: str, datasource_name:
         }
     }
 
-def generate_table_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery") -> dict:
+def generate_table_panel(id_num: int, title: str, sql: str, datasource_name: str = "BigQuery", grid_pos: dict = None) -> dict:
     """Generate a Grafana Table panel JSON."""
     return {
         "id": id_num,
@@ -154,7 +154,7 @@ def generate_table_panel(id_num: int, title: str, sql: str, datasource_name: str
                 "refId": "A"
             }
         ],
-        "gridPos": {
+        "gridPos": grid_pos or {
             "h": 12,
             "w": 24,
             "x": 0,
@@ -169,3 +169,38 @@ def generate_table_panel(id_num: int, title: str, sql: str, datasource_name: str
             }
         }
     }
+
+def calculate_next_grid_position(panels: list, width: str) -> dict:
+    """Calculate the next panel's grid position based on the width requested ('half' or 'full')
+    and existing panels layout.
+
+    - 'half': w=12, h=8
+    - 'full': w=24, h=8
+    """
+    w = 12 if width == "half" else 24
+    h = 8
+
+    # 1. If empty, place at the top left
+    if not panels:
+        return {"x": 0, "y": 0, "w": w, "h": h}
+
+    # 2. Inspect the last panel
+    last_panel = panels[-1]
+    last_grid = last_panel.get("gridPos", {})
+    last_x = last_grid.get("x", 0)
+    last_y = last_grid.get("y", 0)
+    last_w = last_grid.get("w", 24)
+    last_h = last_grid.get("h", 12)
+
+    # If the new panel is full-width, always start a new row below the last panel
+    if w == 24:
+        return {"x": 0, "y": last_y + last_h, "w": w, "h": h}
+
+    # If the new panel is half-width, check if there is space on the same row next to the last panel
+    # The left half is x=0, right half is x=12.
+    if last_x == 0 and last_w == 12:
+        # Last panel was on the left half and was half-width. Place next to it on the right half.
+        return {"x": 12, "y": last_y, "w": w, "h": h}
+    else:
+        # Last panel was full-width, or on the right half. Start a new row.
+        return {"x": 0, "y": last_y + last_h, "w": w, "h": h}
