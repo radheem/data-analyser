@@ -98,3 +98,26 @@ def test_calculate_next_grid_position_stacking():
     pos = calculate_next_grid_position(panels, "half")
     assert pos == {"x": 0, "y": 8, "w": 12, "h": 8}
 
+def test_normalize_grafana_unit():
+    """Verify that normalize_grafana_unit correctly handles currencies and fallback strings."""
+    from src.grafana_generators import normalize_grafana_unit
+    
+    # 1. Fallbacks & defaults
+    assert normalize_grafana_unit(None) == "short"
+    assert normalize_grafana_unit("") == "short"
+    assert normalize_grafana_unit("  ") == "short"
+    assert normalize_grafana_unit("short") == "short"
+    
+    # 2. ISO Currency 3-letter strings (case-insensitive)
+    assert normalize_grafana_unit("USD") == "currencyUSD"
+    assert normalize_grafana_unit("usd") == "currencyUSD"
+    assert normalize_grafana_unit("EUR") == "currencyEUR"
+    assert normalize_grafana_unit("eur") == "currencyEUR"
+    assert normalize_grafana_unit("gbp") == "currencyGBP"
+    assert normalize_grafana_unit("JPY") == "currencyJPY"
+    
+    # 3. Passthrough strings
+    assert normalize_grafana_unit("percent") == "percent"
+    assert normalize_grafana_unit("bytes") == "bytes"
+
+

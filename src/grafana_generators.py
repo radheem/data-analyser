@@ -204,3 +204,23 @@ def calculate_next_grid_position(panels: list, width: str) -> dict:
     else:
         # Last panel was full-width, or on the right half. Start a new row.
         return {"x": 0, "y": last_y + last_h, "w": w, "h": h}
+
+def normalize_grafana_unit(unit_str: str) -> str:
+    """Normalize standard currency ISO codes and general unit descriptors to Grafana's internal formats.
+
+    - Currencies (3-letters): 'USD' or 'usd' -> 'currencyUSD'
+    - Default: 'short' if None or empty
+    - Others: Passed through natively
+    """
+    if not unit_str:
+        return "short"
+        
+    cleaned = unit_str.strip()
+    if not cleaned:
+        return "short"
+        
+    # Check if exactly 3 letters representing a potential Currency ISO code
+    if len(cleaned) == 3 and cleaned.isalpha():
+        return f"currency{cleaned.upper()}"
+        
+    return cleaned
