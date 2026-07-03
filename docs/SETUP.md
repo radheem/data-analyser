@@ -46,3 +46,34 @@ To run the unit tests and check code coverage:
 ```bash
 uv run pytest --cov=src --cov-report=term-missing
 ```
+
+## Dynamic Grafana Dashboard Setup
+
+The project includes an auto-provisioned local Grafana setup running inside Docker, enabling the AI agent to dynamically convert your natural language queries into instant, interactive visual dashboards.
+
+### Prerequisites (for Visualization)
+- **Docker** and **Docker Compose** installed on your machine.
+- Your GCP Service Account JSON key saved as `gcp-creds.json` in the root of the project directory.
+
+### Running the Visualization Environment
+1. Put your `gcp-creds.json` Service Account key in the project root.
+2. Start the containerized services:
+   ```bash
+   docker compose -f deploy/docker-compose.yml up -d --build
+   ```
+   On startup, the MCP server automatically reads your `gcp-creds.json`, extracts the credentials, auto-generates the Grafana `bigquery.yaml` provisioning file, and extracts the raw PEM key to `deploy/grafana/google-key.pem` (safely git-ignored).
+3. Access the Grafana UI by opening your browser to:
+   ```
+   http://localhost:3000
+   ```
+   *Note: Anonymous Admin access is enabled by default for local development, so you can inspect, view, and modify dashboards without any login requirements!*
+
+### Dynamic Visualization Tool
+Once the environment is running, you or your AI agent can call the `create_grafana_dashboard` tool to instantly deploy dynamic Bar, Line, Pie, or Table charts:
+```python
+# Programmatic usage example
+import src.server
+sql = "SELECT advertiser_name, SUM(spend_range_max_usd) as max_spend FROM `bigquery-public-data.google_political_ads.creative_stats` WHERE regions='US' GROUP BY advertiser_name ORDER BY max_spend DESC LIMIT 10"
+result = src.server.create_grafana_dashboard(sql, "barchart", "Top Advertisers Chart")
+```
+It returns a direct working URL to the live Grafana dashboard. All generated dashboards are persistently mounted locally inside `deploy/grafana/dashboards`.
