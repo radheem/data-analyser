@@ -424,4 +424,44 @@ def test_setup_grafana_datasource(mock_exists):
     assert "defaultProject: test-project" in joined_writes
     assert "-----BEGIN PRIVATE KEY-----" in joined_writes
 
+@patch("requests.post")
+def test_create_grafana_dashboard_sql_rewriter(mock_post):
+    """Test create_grafana_dashboard tool automatically rewrites DATE as time to TIMESTAMP."""
+    import src.server
+    
+    # Mock requests.post response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": "success",
+        "url": "/d/test-uid/test-slug",
+        "uid": "test-uid"
+    }
+    mock_post.return_value = mock_response
+    
+    # Mock BigQuery client to bypass pre-flight
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.__iter__.return_value = [{"col": 1}]
+    mock_client.query.return_value = mock_query_job
+    
+    original_client = src.server.bq_client
+    src.server.bq_client = mock_client
+    
+    try:
+        src.server.create_grafana_dashboard(
+            sql="SELECT date_range_start as time FROM `creative_stats`",
+            chart_type="timeseries",
+            title="Rewrite Test"
+        )
+        
+        # Verify post is called with rewritten SQL
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        raw_sql = kwargs["json"]["dashboard"]["panels"][0]["targets"][0]["rawSql"]
+        assert "TIMESTAMP(date_range_start) as time" in raw_sql
+        
+    finally:
+        src.server.bq_client = original_client
+
 

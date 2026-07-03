@@ -413,6 +413,10 @@ def create_grafana_dashboard(sql: str, chart_type: str, title: str) -> str:
             "message": "Security Error: Only read-only SELECT or WITH statements are allowed."
         })
         
+    # Pre-emptively rewrite raw DATE columns aliased as 'time' to TIMESTAMP(column)
+    # so that BigQuery returns a true TIMESTAMP, which Grafana natively recognizes on its time axis.
+    clean_sql = re.sub(r"\b(date_range_start|date_range_end)\s+as\s+time\b", r"TIMESTAMP(\1) as time", clean_sql, flags=re.IGNORECASE)
+    
     # Pre-flight query execution check (using BigQuery dry_run to validate syntax/columns for $0 cost)
     if bq_client is not None:
         try:
