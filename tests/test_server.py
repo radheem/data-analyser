@@ -402,3 +402,24 @@ def test_create_grafana_dashboard_fallback_to_table(mock_gen_bar, mock_post):
     finally:
         src.server.bq_client = original_client
 
+@patch("os.path.exists")
+def test_setup_grafana_datasource(mock_exists):
+    """Test setup_grafana_datasource parses credentials and writes provisioning YAML."""
+    from unittest.mock import mock_open
+    import src.server
+    
+    # Mock both gcp-creds.json and provisioning directory to exist
+    mock_exists.side_effect = lambda path: True
+    
+    m_open = mock_open(read_data='{"client_email": "test@gcp.com", "project_id": "test-project"}')
+    with patch("builtins.open", m_open):
+        src.server.setup_grafana_datasource()
+        
+    # Verify open was called to write the yaml file
+    m_open.assert_any_call("deploy/grafana/provisioning/datasources/bigquery.yaml", "w")
+    write_args = [call[0][0] for call in m_open().write.call_args_list]
+    joined_writes = "".join(write_args)
+    assert "clientEmail: test@gcp.com" in joined_writes
+    assert "defaultProject: test-project" in joined_writes
+
+

@@ -12,6 +12,43 @@ from src import grafana_generators
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("political-ads-mcp")
 
+def setup_grafana_datasource():
+    """Dynamically configure the Grafana BigQuery datasource by parsing gcp-creds.json."""
+    creds_path = "gcp-creds.json"
+    yaml_path = "deploy/grafana/provisioning/datasources/bigquery.yaml"
+    
+    if os.path.exists(creds_path) and os.path.exists(os.path.dirname(yaml_path)):
+        try:
+            with open(creds_path, "r") as f:
+                creds = json.load(f)
+                
+            client_email = creds.get("client_email")
+            project_id = creds.get("project_id")
+            
+            if client_email and project_id:
+                yaml_content = f"""apiVersion: 1
+
+datasources:
+  - name: BigQuery
+    type: grafana-bigquery-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      authenticationType: jwt
+      clientEmail: {client_email}
+      defaultProject: {project_id}
+      tokenUri: https://oauth2.googleapis.com/token
+      privateKeyPath: /etc/grafana/google-key.json
+    editable: true
+"""
+                with open(yaml_path, "w") as fy:
+                    fy.write(yaml_content)
+                log.info(f"Successfully auto-configured Grafana datasource for project '{project_id}' and client '{client_email}'.")
+        except Exception as e:
+            log.warning(f"Failed to auto-configure Grafana datasource: {e}")
+
+setup_grafana_datasource()
+
 # Instantiate the FastMCP server based on transport env
 transport = os.environ.get("MCP_TRANSPORT", "stdio")
 if transport == "sse":

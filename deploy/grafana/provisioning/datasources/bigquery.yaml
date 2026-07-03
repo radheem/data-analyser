@@ -7,8 +7,8 @@ datasources:
     isDefault: true
     jsonData:
       authenticationType: jwt
-      clientEmail: ${GF_BQ_CLIENT_EMAIL}
-      defaultProject: ${GF_BQ_PROJECT_ID}
+      clientEmail: adtech-prj@bq-learn-500822.iam.gserviceaccount.com
+      defaultProject: bq-learn-500822
       tokenUri: https://oauth2.googleapis.com/token
       privateKeyPath: /etc/grafana/google-key.json
     editable: true
