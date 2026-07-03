@@ -68,12 +68,8 @@ The project includes an auto-provisioned local Grafana setup running inside Dock
    ```
    *Note: Anonymous Admin access is enabled by default for local development, so you can inspect, view, and modify dashboards without any login requirements!*
 
-### Dynamic Visualization Tool
-Once the environment is running, you or your AI agent can call the `create_grafana_dashboard` tool to instantly deploy dynamic Bar, Line, Pie, or Table charts:
-```python
-# Programmatic usage example
-import src.server
-sql = "SELECT advertiser_name, SUM(spend_range_max_usd) as max_spend FROM `bigquery-public-data.google_political_ads.creative_stats` WHERE regions='US' GROUP BY advertiser_name ORDER BY max_spend DESC LIMIT 10"
-result = src.server.create_grafana_dashboard(sql, "barchart", "Top Advertisers Chart")
-```
-It returns a direct working URL to the live Grafana dashboard. All generated dashboards are persistently mounted locally inside `deploy/grafana/dashboards`.
+### Dynamic Visualization via Grafana MCP
+Once the environment is running, the official Grafana MCP server is exposed at `http://localhost:8000/sse` with standard capabilities. Any compatible MCP client (like Claude Desktop or Cursor) can use standard dashboard tools to query BigQuery and create charts:
+- **`create_or_update_dashboard`**: Generate full JSON layouts dynamically.
+- **`patch_dashboard`**: Perform lightweight updates.
+- **`query_datasource`**: Query BigQuery or any other database configured in Grafana natively.

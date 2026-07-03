@@ -22,11 +22,10 @@ This project provides an intelligent interface between Large Language Models (LL
    - The project uses `pytest` and `pytest-mock`.
    - The BigQuery client is heavily mocked during testing to ensure the server logic and tool schemas can be validated rapidly without incurring cloud costs or requiring active network connections in CI environments.
 
-5. **Dynamic Grafana Dashboard Pipeline (`src/grafana_generators.py`)**
-   - An agent-triggered, resilient dashboard creation system. 
-   - A dedicated Python module (`src/grafana_generators.py`) builds modular, clean JSON panel schemas for Bar Charts, Line Charts (Time Series), Pie Charts, and Data Tables.
-   - The MCP tool (`create_grafana_dashboard`) performs a pre-flight dry run against BigQuery ($0 cost) to validate SQL syntax, then pushes the compiled JSON schema to Grafana's HTTP REST API `/api/dashboards/db` to create or overwrite dashboards.
-   - Incorporates automated, defensive fallback to standard Table panels if specific chart configurations or schema validations fail.
+5. **Official Grafana MCP Integration**
+   - We utilize the official `grafana/mcp-grafana` Docker image to expose native Grafana dashboarding and querying tools to the AI client.
+   - The Python server implements `ensure_grafana_service_account()` which runs on a background thread on boot. It polls local Grafana health, auto-creates an Admin service account, generates a Service Account Token, and saves it to a persistent host-bind volume.
+   - The `grafana-mcp` service loads this token dynamically on startup, ensuring fully automated, secure backend connectivity.
 
 6. **Credentials Auto-Provisioning & Local Infrastructure**
    - Managed via Docker Compose (`deploy/docker-compose.yml`), spawning Grafana alongside the MCP server.
