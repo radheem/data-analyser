@@ -1,4 +1,4 @@
-# Google Political Ads Intelligence Hub & MCP Server
+# Data Analyzer (Political Ads data visualization)
 
 An intelligent Model Context Protocol (MCP) and visualization pipeline for Google's public Political Ads transparency dataset (`bigquery-public-data.google_political_ads.creative_stats`) utilizing Google BigQuery and the official Grafana MCP server.
 
