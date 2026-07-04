@@ -1,6 +1,6 @@
 # Demos
 
-## Demo 1: Data Analyser
+## Demo 1: Data Analyzer
 <video controls width="100%">
   <source src="../assets/demo1-data-analyser-converted.mp4" type="video/mp4">
 </video>
