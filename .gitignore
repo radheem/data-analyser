@@ -7,3 +7,6 @@ gcp-creds.json
 .coverage
 htmlcov/
 .pytest_cache/
+
+site/
+deploy/grafana/mcp-config/
